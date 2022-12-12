@@ -35,14 +35,26 @@ import Ipopt
 include("/home/sam/github/PowerSensitivities.jl/src/sens/nr_sens.jl")
 
 
+struct NRPhaseRetrieval
+    Y::AbstractMatrix #Admittance
+    Δp::AbstractArray #Real power perturbations
+    Δq::AbstractArray #Reactive power perturbations
+    Δv::AbstractArray #Voltage magnitude perturbations
+end
 
-"""
-Given a basic network data dict, construct the physics-informed phase retrieval problem.
-"""
+
 function nr_phase_retrieval!(network::Dict)
     #Solve AC power flow
     compute_ac_pf!(network)
 
+    return nr_phase_retrieval(network)
+end
+
+"""
+Given a basic network data dict, construct the physics-informed phase retrieval problem.
+"""
+function nr_phase_retrieval(network::Dict)
+  
     #Voltage and power injections
     vphasor = calc_basic_bus_voltage(network)
     vm,va = abs.(vphasor),angle.(vphasor)
