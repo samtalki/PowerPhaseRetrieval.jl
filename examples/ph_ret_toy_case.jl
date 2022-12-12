@@ -1,15 +1,15 @@
-include("../PowerSensitivities.jl")
-import .PowerSensitivities as PS
+include("../src/PowerPhaseRetrieval.jl")
+import .PowerPhaseRetrieval as PPR
 using PowerModels
 using LinearAlgebra,Plots
 import SCS
 using Convex
 #rts test case
 net = make_basic_network(parse_file("/home/sam/github/PowerSensitivities.jl/data/pm_matpower/case30.m"))
-results = PS.sdp_sens_phret(net,sel_bus_types=[1])
+results = PPR.sdp_sens_phret(net,sel_bus_types=[1])
 th_hat,th_true = results["va_hat"],results["va_true"]
 err = norm(th_hat - th_true)/norm(th_true)*100
-#maxcut_results = PS.maxcut_sens_phret(net)
+#maxcut_results = PPR.maxcut_sens_phret(net)
 
 
 n = 20
