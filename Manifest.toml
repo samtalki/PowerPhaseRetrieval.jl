@@ -27,9 +27,9 @@ version = "1.1.1"
 
 [[deps.ArrayInterfaceCore]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "c46fb7dd1d8ca1d213ba25848a5ec4e47a1a1b08"
+git-tree-sha1 = "badccc4459ffffb6bce5628461119b7057dec32c"
 uuid = "30b0a656-2188-435a-8636-2ec0e6a096e2"
-version = "0.1.26"
+version = "0.1.27"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -242,9 +242,9 @@ uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.4.8+0"
 
 [[deps.ExproniconLite]]
-git-tree-sha1 = "2fcda331c2d5feead426834c1dd45187a6abc1cd"
+git-tree-sha1 = "01407de3305ba5ea90afc93558ad41d67ed1d187"
 uuid = "55351af7-c7e9-48d6-89ff-24e801d99491"
-version = "0.7.8"
+version = "0.7.9"
 
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -385,9 +385,9 @@ version = "0.11.4"
 
 [[deps.HTTP]]
 deps = ["Base64", "CodecZlib", "Dates", "IniFile", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
-git-tree-sha1 = "822a2b8d53fd5fb8d2f454d521d51dd88bcfc8a6"
+git-tree-sha1 = "97b6c88f4df0ff821a6d93dbdcdf9642e66fa718"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "1.6.0"
+version = "1.6.1"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
@@ -861,9 +861,9 @@ version = "1.37.2"
 
 [[deps.Pluto]]
 deps = ["Base64", "Configurations", "Dates", "Distributed", "FileWatching", "FuzzyCompletions", "HTTP", "HypertextLiteral", "InteractiveUtils", "Logging", "MIMEs", "Markdown", "MsgPack", "Pkg", "PrecompileSignatures", "REPL", "RegistryInstances", "RelocatableFolders", "Sockets", "TOML", "Tables", "URIs", "UUIDs"]
-git-tree-sha1 = "0dafc2977646e4bf1d0a61e67e7911a1e779bcdd"
+git-tree-sha1 = "3e4319099e2145e174f659168bf65e41b32ae57c"
 uuid = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
-version = "0.19.17"
+version = "0.19.18"
 
 [[deps.PolyhedralRelaxations]]
 deps = ["DataStructures", "ForwardDiff", "JuMP", "Logging", "LoggingExtras"]
