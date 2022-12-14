@@ -82,87 +82,6 @@ function compute_basic_ac_pf!(data::Dict{String, Any})
     end
 end
 
-
-"""
-given a basic network data dict, returns a complex valued vector of bus voltage
-values in rectangular coordinates as they appear in the network data.
-"""
-function calc_differentiable_bus_voltage(data::Dict{String,<:Any})
-    b = [bus for (i,bus) in data["bus"] if bus["bus_type"] != 4]
-    bus_ordered = sort(b, by=(x) -> x["index"])
-
-    return [bus["vm"]*cos(bus["va"]) + bus["vm"]*sin(bus["va"])im for bus in bus_ordered]
-end
-
-"""
-computes the power injection of each bus in the network, with a focus on the
-needs of Power Flow solvers.
-excludes voltage-dependent components (e.g. shunts), these should be addressed
-as needed by the calling functions.  note that voltage dependent components are
-resolved during an AC Power Flow solve and are not static.
-data should be a PowerModels network data model
-"""
-function calc_differentiable_bus_injection(data::Dict{String,<:Any})
-    bus_values = Dict(bus["index"] => Dict() for (i,bus) in data["bus"])
-
-    for (i,bus) in data["bus"]
-        bvals = bus_values[bus["index"]]
-        bvals["vm"] = bus["vm"]
-
-        bvals["pd"] = 0.0
-        bvals["qd"] = 0.0
-
-        bvals["ps"] = 0.0
-        bvals["qs"] = 0.0
-
-        bvals["pg"] = 0.0
-        bvals["qg"] = 0.0
-    end
-
-    for (i,load) in data["load"]
-        if load["status"] != 0
-            bvals = bus_values[load["load_bus"]]
-            bvals["pd"] += load["pd"]
-            bvals["qd"] += load["qd"]
-        end
-    end
-
-    for (i,storage) in data["storage"]
-        if storage["status"] != 0
-            bvals = bus_values[storage["storage_bus"]]
-            bvals["ps"] += storage["ps"]
-            bvals["qs"] += storage["qs"]
-        end
-    end
-
-    for (i,gen) in data["gen"]
-        if gen["gen_status"] != 0
-            bvals = bus_values[gen["gen_bus"]]
-            bvals["pg"] += gen["pg"]
-            bvals["qg"] += gen["qg"]
-        end
-    end
-
-    Δps = Dict()
-    Δqs = Dict()
-    for (i,bus) in data["bus"]
-        if bus["bus_type"] != 4
-            bvals = bus_values[bus["index"]]
-            Δp = bvals["pg"] - bvals["ps"] - bvals["pd"]
-            Δq = bvals["qg"] - bvals["qs"] - bvals["qd"]
-        else
-            Δp = NaN
-            Δq = NaN
-        end
-
-        Δps[bus["index"]] = Δp
-        Δqs[bus["index"]] = Δq
-    end
-    bi_dict =  (Δps, Δqs)
-    return [bi_dict[1][i] + bi_dict[2][i]im for i in 1:length(data["bus"])]
-end
-
-
 """
 Given a network data dict, calculate the number of generators per bus
 """
@@ -226,4 +145,86 @@ function update_injection_state!(data::Dict{String,<:Any},x::AbstractVector)
     end
     return data
 end
+
+
+
+
+# """
+# given a basic network data dict, returns a complex valued vector of bus voltage
+# values in rectangular coordinates as they appear in the network data.
+# """
+# function calc_differentiable_bus_voltage(data::Dict{String,<:Any})
+#     b = [bus for (i,bus) in data["bus"] if bus["bus_type"] != 4]
+#     bus_ordered = sort(b, by=(x) -> x["index"])
+
+#     return [bus["vm"]*cos(bus["va"]) + bus["vm"]*sin(bus["va"])im for bus in bus_ordered]
+# end
+
+# """
+# computes the power injection of each bus in the network, with a focus on the
+# needs of Power Flow solvers.
+# excludes voltage-dependent components (e.g. shunts), these should be addressed
+# as needed by the calling functions.  note that voltage dependent components are
+# resolved during an AC Power Flow solve and are not static.
+# data should be a PowerModels network data model
+# """
+# function calc_differentiable_bus_injection(data::Dict{String,<:Any})
+#     bus_values = Dict(bus["index"] => Dict() for (i,bus) in data["bus"])
+
+#     for (i,bus) in data["bus"]
+#         bvals = bus_values[bus["index"]]
+#         bvals["vm"] = bus["vm"]
+
+#         bvals["pd"] = 0.0
+#         bvals["qd"] = 0.0
+
+#         bvals["ps"] = 0.0
+#         bvals["qs"] = 0.0
+
+#         bvals["pg"] = 0.0
+#         bvals["qg"] = 0.0
+#     end
+
+#     for (i,load) in data["load"]
+#         if load["status"] != 0
+#             bvals = bus_values[load["load_bus"]]
+#             bvals["pd"] += load["pd"]
+#             bvals["qd"] += load["qd"]
+#         end
+#     end
+
+#     for (i,storage) in data["storage"]
+#         if storage["status"] != 0
+#             bvals = bus_values[storage["storage_bus"]]
+#             bvals["ps"] += storage["ps"]
+#             bvals["qs"] += storage["qs"]
+#         end
+#     end
+
+#     for (i,gen) in data["gen"]
+#         if gen["gen_status"] != 0
+#             bvals = bus_values[gen["gen_bus"]]
+#             bvals["pg"] += gen["pg"]
+#             bvals["qg"] += gen["qg"]
+#         end
+#     end
+
+#     Δps = Dict()
+#     Δqs = Dict()
+#     for (i,bus) in data["bus"]
+#         if bus["bus_type"] != 4
+#             bvals = bus_values[bus["index"]]
+#             Δp = bvals["pg"] - bvals["ps"] - bvals["pd"]
+#             Δq = bvals["qg"] - bvals["qs"] - bvals["qd"]
+#         else
+#             Δp = NaN
+#             Δq = NaN
+#         end
+
+#         Δps[bus["index"]] = Δp
+#         Δqs[bus["index"]] = Δq
+#     end
+#     bi_dict =  (Δps, Δqs)
+#     return [bi_dict[1][i] + bi_dict[2][i]im for i in 1:length(data["bus"])]
+# end
 

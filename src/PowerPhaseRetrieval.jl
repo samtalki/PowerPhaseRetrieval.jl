@@ -3,7 +3,7 @@ include("/home/sam/github/PowerSensitivities.jl/src/PowerSensitivities.jl")
 using .PowerSensitivities
 using LinearAlgebra
 
-
+include("core/nr_linear_approx.jl") #taylor series linear approximations
 include("prob/ph_retrieve.jl")
 include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
