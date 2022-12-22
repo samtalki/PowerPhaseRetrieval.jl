@@ -3,11 +3,19 @@ include("/home/sam/github/PowerSensitivities.jl/src/PowerSensitivities.jl")
 using .PowerSensitivities
 using LinearAlgebra
 
+
+include("core/nr_basic.jl")
+include("core/nr_phret.jl")
 include("core/nr_linear_approx.jl") #taylor series linear approximations
+include("core/structs.jl") #Phase retrieval models
 include("prob/ph_retrieve.jl")
 include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
 
+
+#--- Newton Raphson
+export compute_basic_ac_pf!
+export calc_basic_ac_pf_data!
 
 #--- Phase retrieval problem
 export SensitivityPhaseRetrieval
