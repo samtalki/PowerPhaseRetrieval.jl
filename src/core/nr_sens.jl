@@ -4,41 +4,47 @@ using LinearAlgebra, SparseArrays
 import ForwardDiff
 import PowerModels as PM
 
+abstract type SensitivityModel end
+
 """
 Type that comprises a standard Newton-Raphson sensitivity model for a power network
     data:: PowerModels network data
     Y:: Admittance matrix 
-    J:: A function J: v_ph -> [ ∂p/∂θ  ∂q/∂θ ; ∂p/∂v ∂q/∂v](v_ph) that evaluates the power flow jacobian given a vector of voltage phasors.
+    J:: A function J: x -> [ ∂p/∂θ  ∂q/∂θ ; ∂p/∂v ∂q/∂v](x) that evaluates the power flow jacobian given a vector of voltage phasors.
 """
-struct SensitivityModel 
+struct LinearSensitivityModel <: SensitivityModel 
     data::Dict{String, Any} #PowerModels network
     Y::SparseMatrixCSC #Network admittance matrix
     J::Function # J: vph ∈ R²ⁿ ↦ Δx ∈ R²ⁿ. A function that returns the power flow Jacobian through automatic differentiatiation
+    f::Function # f: vph ∈ R^2n ↦ [Δp,Δq]^T ∈ R^2n. Mistaches given a  grid operating point x.
+    f_approx::Function # f: vph ↦ [p,q]^T ∈ R^2n
 end
 
 """
 Constructor for the basic network sensitivty model.
     data:: PowerModels network
 """
-function SensitivityModel(data::Dict{String, Any})
+function LinearSensitivityModel(data::Dict{String, Any})
     s_inj = PM.calc_basic_bus_injection(data)
+    x0 = PM.calc_basic_bus_voltage(data)
     Y = PM.calc_basic_admittance_matrix(data)
-    mismatch = v_ph::AbstractArray -> calc_mismatch(v_ph,s_inj,Y)
-    J = v_ph::AbstractArray -> -1 .* ForwardDiff.jacobian(mismatch,v_ph) #Note: v_ph = [θ ; vmag]
-    return SensitivityModel(data,Y,J)
+    f = x::AbstractArray -> calc_mismatch(x,s_inj,Y)
+    J = x::AbstractArray -> -1 .* ForwardDiff.jacobian(f,x) #Note: x = [θ ; vmag]
+    f_approx =  x::AbstractArray -> s_inj + J(x0)*(x0-x)
+    return LinearSensitivityModel(data,Y,J,f,f_approx)
 end
 
 """
 Given complex voltage and powers, and an admittance matrix Y, calculate the power flow mismatch.
 """
-function calc_mismatch(v_ph,s,Y)
+function calc_mismatch(x,s,Y)
     n_bus = size(Y,1)
     # Convert phasor to rectangular
-    function calc_rect_bus_voltage(v_ph::AbstractArray)
-        θ,vm = v_ph[1:n_bus],v_ph[n_bus+1:end]
+    function calc_rect_bus_voltage(x::AbstractArray)
+        θ,vm = x[1:n_bus],x[n_bus+1:end]
         [vmᵢ*(cos(θᵢ) + sin(θᵢ)*im) for (θᵢ,vmᵢ) in zip(θ,vm)]
     end
-    v_rect = calc_rect_bus_voltage(v_ph)
+    v_rect = calc_rect_bus_voltage(x)
     si = v_rect .* conj(Y * v_rect) #compute the injection
     Δp, Δq = real(s - si), imag(s - si)
     Δx = [Δp ; Δq]
