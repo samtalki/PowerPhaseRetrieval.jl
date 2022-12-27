@@ -25,14 +25,16 @@ Constructor for the basic network sensitivty model.
     data:: PowerModels network
 """
 function LinearSensitivityModel(data::Dict{String, Any})
-    s_inj = PM.calc_basic_bus_injection(data)
+    PM.compute_ac_pf!(data)
+    f_x0 = PM.calc_basic_bus_injection(data)
     x0 = PM.calc_basic_bus_voltage(data)
     Y = PM.calc_basic_admittance_matrix(data)
-    f = x::AbstractArray -> calc_mismatch(x,s_inj,Y)
+    f = x::AbstractArray -> calc_mismatch(x,f_x0,Y)
     J = x::AbstractArray -> -1 .* ForwardDiff.jacobian(f,x) #Note: x = [θ ; vmag]
-    f_approx =  x::AbstractArray -> s_inj + J(x0)*(x0-x)
+    f_approx =  x::AbstractArray -> f_x0 + J(x0)*(x0-x)
     return LinearSensitivityModel(data,Y,J,f,f_approx)
 end
+
 
 """
 Given complex voltage and powers, and an admittance matrix Y, calculate the power flow mismatch.
