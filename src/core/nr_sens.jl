@@ -4,7 +4,7 @@ using LinearAlgebra, SparseArrays
 import ForwardDiff
 import PowerModels as PM
 
-abstract type SensitivityModel end
+#abstract type SensitivityModel end
 
 """
 Type that comprises a standard Newton-Raphson sensitivity model for a power network
@@ -12,7 +12,7 @@ Type that comprises a standard Newton-Raphson sensitivity model for a power netw
     Y:: Admittance matrix 
     J:: A function J: x -> [ ∂p/∂θ  ∂q/∂θ ; ∂p/∂v ∂q/∂v](x) that evaluates the power flow jacobian given a vector of voltage phasors.
 """
-struct LinearSensitivityModel <: SensitivityModel 
+struct LinearSensitivityModel # <: SensitivityModel 
     data::Dict{String, Any} #PowerModels network
     Y::SparseMatrixCSC #Network admittance matrix
     J::Function # J: vph ∈ R²ⁿ ↦ Δx ∈ R²ⁿ. A function that returns the power flow Jacobian through automatic differentiatiation

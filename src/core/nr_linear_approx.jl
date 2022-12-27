@@ -17,7 +17,7 @@ struct NRPFLinearApprox
     f::Function #linear approximation of the mismatches
     x::AbstractArray{Complex} #Current operating point
     f_x::AbstractArray{Complex} #Mistmaches evaluated at current operating point
-    J::JacobianMatrix #Jacobian matrix
+    J::PowerFlowJacobian #Jacobian matrix
 end
 
 
