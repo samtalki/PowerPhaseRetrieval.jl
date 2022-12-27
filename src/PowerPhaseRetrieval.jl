@@ -5,13 +5,14 @@ using LinearAlgebra
 
 
 include("core/nr_basic.jl")
-include("core/nr_phret.jl")
+include("core/nr_data.jl")
 include("core/nr_linear_approx.jl") #taylor series linear approximations
+include("core/nr_sens.jl")
 include("core/structs.jl") #Phase retrieval models
 include("prob/ph_retrieve.jl")
 include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
-
+include("prob/ybus_phret.jl")
 
 #--- Newton Raphson
 export compute_basic_ac_pf!
