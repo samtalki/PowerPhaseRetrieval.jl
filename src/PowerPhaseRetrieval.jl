@@ -18,10 +18,12 @@ include("prob/ybus_phret.jl")
 export compute_basic_ac_pf!
 export calc_basic_ac_pf_data!
 
-#--- Phase retrieval problem
+#----- Phase retrieval problem(s)
 export SensitivityPhaseRetrieval
 export nr_phase_retrieval,nr_phase_retrieval! #Netwon-Raphson standard phase retrieval
 export sdp_sens_phret,maxcut_sens_phret #Senstivitiy matrix phase retrieval.
+#--- Ybus phasecut
+export solve_ybus_phasecut!
 
 #--- Jacobian-like matrix utilities
 #- Classical AC Power flow Jacobian utilities
