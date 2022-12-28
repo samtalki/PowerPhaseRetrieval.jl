@@ -20,7 +20,7 @@ b = abs.(A*x) + rand(n)
 b_rect = A*x
 
 M = diagm(b)*(I(n)-A*pinv(A))*diagm(b)
-U = ComplexVariable(n,n)
+U = Convex.ComplexVariable(n,n)
 objective = inner_product(U,M)
 c1 = diag(U) == 1
 c2 = U in :SDP
@@ -35,6 +35,7 @@ for i in 1:n
     u[i] = u[i]/abs(u[i])
 end
 
-b_angle_hat = atan.(imag.(u) ./ real.(u))
-b_angle_true = atan.( imag.(b_rect) ./ real.(b_rect))
+b_angle_hat = angle.(u)
+b_angle_true = angle.(A*x)
+relerr = norm(b_angle_true-b_angle_hat)/norm(b_angle_true)
 x_angle = atan.(imag.(x) ./ real.(x))
