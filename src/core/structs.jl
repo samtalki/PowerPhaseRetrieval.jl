@@ -1,6 +1,6 @@
 #----- TODO: struct
 
-struct NRPhaseRetrieval
+struct NRPhaseRetrievalData
     n_bus::Union{Integer,Real}
     Y::AbstractMatrix #Admittance
     J::AbstractMatrix #Jacobian Matrix
@@ -11,10 +11,19 @@ struct NRPhaseRetrieval
     sel_bus_types::Union{AbstractArray{Integer},Integer}
 end
 
+
+"""
+Given a network and bus types, create the NR phase retrieval model data
+"""
+function NRPhaseRetrievalData(network::Dict;sel_bus_types=[1])
+    
+end
+
+
 """
 Given a basic network dict and a sigma_noise for the random perturbation, create phase retrieval model
 """
-function NRPhaseRetrieval(network::Dict,sigma_noise=0.005,sel_bus_types=[1])
+function NRPhaseRetrievalData(network::Dict,sigma_noise=0.0001;sel_bus_types=[1])
     compute_ac_pf!(network)
 
     #----- Get relevant PQ bus indeces
