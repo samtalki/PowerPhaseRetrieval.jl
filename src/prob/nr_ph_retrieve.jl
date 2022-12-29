@@ -37,11 +37,11 @@ include("/home/sam/github/PowerSensitivities.jl/src/sens/nr_sens.jl")
 #Set the seed
 Random.seed!(2023)
 
-function nr_phase_retrieval!(network::Dict,sigma_noise=0.005,sel_bus_types=[1])
+function nr_phase_retrieval!(network::Dict,sigma_noise=0.0001,sel_bus_types=[1])
     #Solve AC power flow
     #data = NRPhaseRetrieval(network,sigma_noise,sel_bus_types)
     compute_ac_pf!(network)
-    return nr_phase_retrieval(network)
+    return nr_phase_retrieval(network,sigma_noise,sel_bus_types)
 end
 
 """
@@ -53,18 +53,17 @@ function nr_phase_retrieval(network::Dict,sigma_noise=0.0001,sel_bus_types=[1])
     n_bus = length(sel_bus_idx) #Get num_bus
     Y = calc_basic_admittance_matrix(network)[sel_bus_idx,sel_bus_idx]
 
-    #----- Compute important ground truth values/params
-    
+    #----- Compute nominal ground truth values/params
     #-Compute ground truth complex power injections
     rect_s_nom = calc_basic_bus_injection(network)[sel_bus_idx]
     p_nom,q_nom = real.(rect_s_nom),imag.(rect_s_nom)
     f_x_nom = [p_nom;q_nom]
     
     #-Compute ground truth Jacobians
-    J = calc_jacobian_matrix(network,sel_bus_types) #PQ buses only
-    J_nom = Matrix(J.matrix)
-    ∂pθ_true,∂qθ_true = J.pth,J.qth #--- UNKNOWN angle blocks
-    ∂pv,∂qv = J.pv,J.qv
+    J_nom_model = calc_jacobian_matrix(network,sel_bus_types) #PQ buses only
+    J_nom = Matrix(J_nom_model.matrix)
+    ∂pθ_true,∂qθ_true = J_nom_model.pth,J_nom_model.qth #--- UNKNOWN angle blocks
+    ∂pv,∂qv = J_nom_model.pv,J_nom_model.qv
 
     #-Compute ground truth voltages
     v_rect_nom = calc_basic_bus_voltage(network)[sel_bus_idx]
@@ -75,20 +74,20 @@ function nr_phase_retrieval(network::Dict,sigma_noise=0.0001,sel_bus_types=[1])
     d_noise = Normal(0,sigma_noise)
     f_x_obs = J_nom*x_nom + rand(d_noise,n_bus*2)
     x_obs = inv(J_nom)*f_x_obs
-    vm_obs = x_obs[1:n_bus]
+    vm_obs = x_obs[n_bus+1:end]
     p_obs = f_x_obs[1:n_bus]
     q_obs = f_x_obs[n_bus+1:end]
 
     #--- Compute a random perturbation around the operating point,
     Δx = rand(d_noise,n_bus*2)
-    Δv,Δθ_true = Δx[1:n_bus],Δx[n_bus+1:end]
+    Δθ_true,Δv = Δx[1:n_bus],Δx[n_bus+1:end]
     x_obs = x_nom + Δx
-    vm_obs = x_obs[1:n_bus]
-    Δf = J_nom*Δx
-    Δp,Δq = Δf[1:n_bus],Δf[n_bus+1:end]
+    vm_obs = x_obs[n_bus+1:end]
+    f_x_obs = J_nom*Δx
+    Δp,Δq = f_x_obs[1:n_bus],f_x_obs[n_bus+1:end]
     p_obs = p_nom + Δp
     q_obs = q_nom + Δq
-    f_x_obs = [p_obs;q_obs]
+    #f_x_obs = [p_obs;q_obs]
 
     #----- Check the reasonableness of this linearization
     linearization_error = norm(x_nom - inv(J_nom)*f_x_obs)/norm(x_nom)
@@ -164,7 +163,7 @@ function nr_phase_retrieval(network::Dict,sigma_noise=0.0001,sel_bus_types=[1])
     θ_opt = atan.(θ_i_opt,θ_r_opt)
 
     ∂pθ_hat,∂qθ_hat = value.(∂pθ),value.(∂qθ)
-    Δθ_hat = -inv(∂pθ_hat)*∂pv*vm_obs + inv(∂qθ_hat)*p_obs
+    Δθ_hat = -inv(∂pθ_hat)*∂pv*vm_obs + inv(∂pθ_hat)*p_obs
     θ_hat = va_nom + Δθ_hat
     return Dict(
         "th_opt"=>θ_opt,
@@ -367,34 +366,5 @@ function calc_closest_rank_r(A::Matrix,r::Integer)
     end
     return U * Diagonal(Σ) * V' 
 end
-"""
-WIP
-"""
-function model_phase_jacobian_retrieval(data::Dict; verbose=true)
-    model = Model(SCS.Optimizer)
-    
-    constraint_jacobian_physics(model,data)
-    #The phase angle difference between voltage and current
-    @variable(model,θ[1:n_bus]) 
-    #Real and imaginary parts of complex voltage e,f s.t. v = e + jf
-    @variable(model,e[1:n_bus])
-    @variable(model,f[1:n_bus])
-    #Real and imaginary parts of complex power p,q s.t. s = p + jq
-    @variable(model,p[1:n_bus])
-    @variable(model,q[1:n_bus])
-
-
-    #Constraint on the measurements
-    @constraint(model,abs.(b) == y)
-    @objective(model,Min,x)
-    return model
-end 
-
-# """
-# Given network data dict return whole jacobian estimated from magnitudes
-# """
-# function model_jacobian_retrieval(data::Dict; verbose=true)
-    
-# end
 
 
