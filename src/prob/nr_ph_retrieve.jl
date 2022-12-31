@@ -86,8 +86,7 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
     model = Model(Ipopt.Optimizer)
 
     #----- Variables and expressions
-    #--- Phase Variables
-    #-Change in voltage phase angle variable
+    #--- Phase VariableS
     @variable(model,θ[1:n_bus])
 
     #--- Phase jacobian variables
@@ -97,16 +96,13 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
     #---- Expressions
     #- Grid state with unknown phase angles.
     x = [θ; vm_obs]
-
     #- Jacobian matrix
     J = [
         ∂pθ ∂pv;
         ∂qθ ∂qv
     ]
-
     #- Residual expression
     @variable(model,resid[1:2*n_bus])
-    #Residual expression
     @constraint(model,resid .== J*x .- f_x_obs)
 
     #----- Constraints
