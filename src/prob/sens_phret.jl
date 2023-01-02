@@ -118,19 +118,7 @@ function sdp_sens_phret(data::SensitivityPhaseRetrieval)
     )
 end
 
-"""
-Find the closest rank-R approximate matrix of A
-"""
-function calc_closest_rank_r(A::Matrix,r::Integer)
-    (m,n) = size(A)
-    U,Σ,V = svd(A)
-    for (i,s_i) in enumerate(Σ)
-        if i > r 
-            Σ[i] = 0
-        end
-    end
-    return U * Diagonal(Σ) * V' 
-end
+
 
 # ===================================
 # Phase cut, max flow, and phase retrieval approach

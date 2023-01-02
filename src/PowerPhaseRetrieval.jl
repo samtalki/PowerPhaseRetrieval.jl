@@ -12,7 +12,22 @@ include("core/structs.jl") #Phase retrieval models
 include("prob/ph_retrieve.jl")
 include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
+include("prob/rand_nr_phret.jl")
 include("prob/ybus_phret.jl")
+
+"""
+Find the closest rank-R approximate matrix of A
+"""
+function calc_closest_rank_r(A::Matrix,r::Integer)
+    (m,n) = size(A)
+    U,Σ,V = svd(A)
+    for (i,s_i) in enumerate(Σ)
+        if i > r 
+            Σ[i] = 0
+        end
+    end
+    return U * Diagonal(Σ) * V' 
+end
 
 #--- Newton Raphson
 export compute_basic_ac_pf!
