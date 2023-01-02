@@ -29,7 +29,7 @@ end
 Struct for estimated voltage power sensitivities
 """
 struct EstimatedVoltagePowerSens
-    F_X_obs::AbstractMatrix{T,2} #Matrix whose columns are random 
+    F_X_obs::AbstractMatrix #Matrix whose columns are random 
     X_obs::Matrix
     dist_loads::Vector{Gamma} #gamma distribution loads
     shape::Union{Vector{Float64},Float64} #Shape params (means of nominal injections)
@@ -68,5 +68,3 @@ struct RandomNRPRModel
     sigma_noise::Union{Real,Float64}
     sel_bus_types::Union{AbstractArray{Integer},Integer}
 end
-
-function est_bus_voltage_phase!(network::Dict,)

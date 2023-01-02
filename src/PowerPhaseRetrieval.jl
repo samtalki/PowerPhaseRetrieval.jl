@@ -14,6 +14,7 @@ include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
 include("prob/rand_nr_phret.jl")
 include("prob/ybus_phret.jl")
+include("io/load_samples.jl")
 
 """
 Find the closest rank-R approximate matrix of A
@@ -51,7 +52,8 @@ export calc_voltage_sensitivity_matrix
 #- Spectral Analysis utilities
 export SpectralAnalysis
 export calc_spectral_analysis,calc_condition_number
-
-greet() = print("Hello World!")
+#- Timeseries data utilities
+export AMIData
+export EstimatedJacobians
 
 end # module

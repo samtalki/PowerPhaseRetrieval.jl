@@ -2,7 +2,7 @@ include("../src/PowerPhaseRetrieval.jl")
 import .PowerPhaseRetrieval as PPR
 import PowerModels as PM
 
-net = PM.make_basic_network(PM.parse_file("/home/sam/github/PowerSensitivities.jl/data/radial_test/case_RTS_GMLC.m"))
+net = PM.make_basic_network(PM.parse_file("/home/sam/github/PowerSensitivities.jl/data/radial_test/case14.m"))
 PM.compute_ac_pf!(net)
 idx = PPR.calc_bus_idx_of_type(net,[1])
 Y = PM.calc_basic_admittance_matrix(net)
