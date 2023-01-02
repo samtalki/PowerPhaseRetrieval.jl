@@ -21,8 +21,7 @@ Ybus phase retrieval solution data
 struct YbusPhretSolution
     model::Model
     data::YbusPhretData
-    is_tight::Bool 
-    uncertainty::Union{AbstractArray,Nothing} #measure of uncertainty diag(U - v*v^T) around the solution described in "Phase Recovery, Maxcut, ...."
+    X_opt::AbstractArray #symmetric matrix solution
     Vrect::AbstractArray{Complex}
     Irect::AbstractArray{Complex} #Rectangular estimated current phasors
     Vangle::AbstractArray{Real} #Voltage phase
@@ -37,13 +36,19 @@ end
 """
 Given a basic network data dict make the ybus phret PROBLMEM DATA
 """
-function YbusPhretData(net::Dict{String,Any})
+function YbusPhretData(net::Dict{String,Any};sel_bus_types=[1,2])
     compute_ac_pf!(net)
     
-    #topology param
-    n_bus = length(net["bus"])
-    Y = Matrix(calc_basic_admittance_matrix(net))
+    #Select buses
+    sel_bus_idx = calc_bus_idx_of_type(net,sel_bus_types)
+    n_sel_bus = length(sel_bus_idx) #Get num_bus
     
+    n_bus = length(net["bus"])
+
+    #topology params
+    Y = Matrix(calc_basic_admittance_matrix(net)) #full admittance matrix
+    Yprime = Matrix(calc_basic_admittance_matrix(net))[sel_bus_idx,sel_bus_idx] #admittance matrix with slack removed
+
     #voltages
     Vrect = calc_basic_bus_voltage(net)
     Vmag,Vangle = abs.(Vrect),angle.(Vrect)
@@ -74,13 +79,22 @@ Given a basic network data dict make the ybus phret MODEL
 function solve_ybus_phasecut(data::YbusPhretData)
     n_bus,Y,Vmag,Imag = data.n_bus,data.Y,data.Vmag,data.Imag #unpack data
     model = Model(SCS.Optimizer)
+
+    #Complex voltage
+    @variable(model,vr[1:n_bus])
+    @variable(model,vi[1:n_bus])
     
+    #Complex current phase
+    @variable(model,ur[1:n_bus])
+    @variable(model,ui[1:n_bus])
+
+    #PSD matrix
+    @variable(model,X[1:2*n_bus,1:2*n_bus], PSD)
 
     #Construct M matrix (fixed phase representation)
-    M = Diagonal(Imag)*(I - Y * Y')*Diagonal(Imag)
-    Mr,Mi = real.(M),imag.(M)
-
+    M = Diagonal(Imag)*(I - Y * pinv(Y))*Diagonal(Imag)
     #transformed M matrix
+    Mr,Mi = real.(M),imag.(M)
     @expression(model,T_M,
         [
             Mr -1*Mi; 
@@ -88,61 +102,64 @@ function solve_ybus_phasecut(data::YbusPhretData)
         ]
     )
 
-    #Phase matrix X = uu*
-    @variable(model,X[1:2*n_bus,1:2*n_bus],PSD)
+    # #transformed Y bus
+    # Yr,Yi = real.(Y),imag.(Y)
+    # @expression(model,T_Y,
+    #     [
+    #         Yr -Yi;
+    #         Yi Yr
+    #     ]
+    # )
+
+    # #Transformer current magnitude
+    # @expression(model,Iphasor,
+    #     [
+    #         Diagonal(Imag)*ur;
+    #         Diagonal(Imag)*ui
+    #     ]
+    # )
     
-    #Phase matrix constraints
-    #for i=1:n_bus
-        # @constraint(model,X[i,i] + X[n_bus+i,n_bus+i] == 2)
-        # for j=1:n_bus
-        #     @constraint(model,X[i,j] == X[n_bus+i,n_bus+j])
-        #     @constraint(model,X[n_bus+i,j] == -X[i,n_bus+j])
-        # end   
-    #end
-    
-    for i =1:n_bus*2
-        @constraint(model,X[i,i]==1) 
+    #Complex constraints
+    for i = 1:n_bus
+        @constraint(model,X[i,i] ==1)
+        @constraint(model,X[i+n_bus,i+n_bus]==1)
+        #@constraint(model,X[1:n_bus,i] .== ur*ur[i])
+        #@constraint(model,X[n_bus+1:end,i] .== ui*ur[i])
+        #@constraint(model,X[1:n_bus,i+n_bus] .== -ur.*ui[i])
+        #@constraint(model,X[n_bus+1:end,i+n_bus] .== ui*ui[i])
     end
 
-    #objective and solve
-    @objective(model,Min,tr(T_M*X))
+   #Trace objective
+    @objective(
+        model,
+        Min,
+        tr(T_M*X)
+    )
     optimize!(model)
-
    
     #Extract solution, check for uncertainty of the relaxation
-    X_opt = value.(X)[1:n_bus,1:n_bus] + value.(X)[n_bus+1:end,1:n_bus].* im
-    (values,vectors) = eigen(X_opt)
-    u = vectors[:,1] ./ abs.(vectors[:,1])
-    uncertainty = diag(X_opt - u*u')
+    X_opt = value.(X)
+    #X_opt = value.(X)
+    evals = eigvals(X_opt)
+    if length([e for e in evals if abs(real(e)) > 1e-4]) >1
+        X_opt = calc_closest_rank_r(X_opt,1)
+    end
+    X_hat = X_opt[1:n_bus,1:n_bus] .+ X_opt[n_bus+1:end,1:n_bus] .* im
+    evals,evecs = eigen(X_hat)
+    uhat = evecs[:,1] ./ abs.(evecs[:,1])
     
     #reconstruct the current phase, voltage phase, etc.
-    Iangle_est = angle.(u)
-    Irect_est = Imag .* (cos.(Iangle_est) + sin.(Iangle_est)*im)
-    Vrect_est = pinv(Y)*Diagonal(Imag)*u
-    #Vrect_est = inv(Y)*Irect_est
+    Iangle_est = angle.(uhat)
+    Irect_est = Diagonal(Imag)*uhat
+    #Irect_est = Imag .* (cos.(Iangle_est) + sin.(Iangle_est)*im)
+    Vrect_est = pinv(Y)*Diagonal(Imag)*uhat
     Vangle_est = angle.(Vrect_est)
 
-    Vangle_rect = 
-    println("Rank of solution: ",rank(X_opt))
-    is_tight,uncertainty = true,nothing
-    if rank(X_opt) > 1
-        is_tight = false
-        X_rank_one = calc_closest_rank_r(X_opt,1)
-        #Compute uncertainty of the relaxation
-        vecs = eigvecs(X_rank_one)
-        v = vecs[:,1] ./ norm(vecs[:,1])
-        uncertainty = diag(X_opt - v*v')
-        #Force rank one to the best possible solution
-        X_opt = X_rank_one #save the 
-    end
-
-
     #Return the solution struct
-    return X_opt,YbusPhretSolution(
+    return YbusPhretSolution(
         model, #model struct
         data, #data struct
-        is_tight,
-        uncertainty,
+        X_opt,
         Vrect_est,
         Irect_est,
         Vangle_est,
@@ -163,3 +180,18 @@ function solve_ybus_phasecut!(net::Dict{String,Any})
     sol = solve_ybus_phasecut(data)
     return sol
 end
+
+
+#Vangle_rect = 
+# println("Rank of solution: ",rank(X_opt))
+# is_tight,uncertainty = true,nothing
+# if rank(X_opt) > 1
+#     is_tight = false
+#     X_rank_one = calc_closest_rank_r(X_opt,1)
+#     #Compute uncertainty of the relaxation
+#     vecs = eigvecs(X_rank_one)
+#     v = vecs[:,1] ./ norm(vecs[:,1])
+#     uncertainty = diag(X_opt - v*v')
+#     #Force rank one to the best possible solution
+#     X_opt = X_rank_one #save the 
+# end
