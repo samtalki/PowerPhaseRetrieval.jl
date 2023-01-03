@@ -39,7 +39,10 @@ export SensitivityPhaseRetrieval
 export nr_phase_retrieval,nr_phase_retrieval! #Netwon-Raphson standard phase retrieval
 export sdp_sens_phret,maxcut_sens_phret #Senstivitiy matrix phase retrieval.
 #--- Ybus phasecut
+export YbusPhretData
 export solve_ybus_phasecut!
+export solve_greedy_ybus_phasecut,solve_greedy_ybus_phasecut!
+export solve_pq_ybus_phasecut
 
 #--- Jacobian-like matrix utilities
 #- Classical AC Power flow Jacobian utilities

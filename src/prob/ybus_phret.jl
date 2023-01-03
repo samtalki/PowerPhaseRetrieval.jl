@@ -76,10 +76,20 @@ end
 """
 Given a basic network data dict make the ybus phret MODEL
 """
-function solve_ybus_phasecut(data::YbusPhretData)
+function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
     n_bus,Y,Vmag,Imag = data.n_bus,data.Y,data.Vmag,data.Imag #unpack data
-    model = Model(SCS.Optimizer)
+    Iangle,Vangle = data.Iangle, data.Vangle
 
+
+    #Bus type idx
+    pq_idx = calc_bus_idx_of_type(net,[1])
+    pv_idx = calc_bus_idx_of_type(net,[2])
+    pq_pv_idx = sort(pq_idx ∪ pv_idx)
+    slack_idx = calc_bus_idx_of_type(net,[3])
+
+
+    model = Model(SCS.Optimizer)
+    #set_optimizer_attribute(model, "max_iter", 6000)
     #Complex voltage
     @variable(model,vr[1:n_bus])
     @variable(model,vi[1:n_bus])
@@ -102,22 +112,25 @@ function solve_ybus_phasecut(data::YbusPhretData)
         ]
     )
 
-    # #transformed Y bus
-    # Yr,Yi = real.(Y),imag.(Y)
-    # @expression(model,T_Y,
-    #     [
-    #         Yr -Yi;
-    #         Yi Yr
-    #     ]
-    # )
+    #PQ/PV BUS Constraints
+    for k=1:n_bus
+        if k ∈ pv_idx || k ∈ slack_idx
+            for j =1:n_bus
+                u_k = cos(Iangle[k]) + sin(Iangle[k])*im
+                u_j = cos(Iangle[j]) + sin(Iangle[j])*im
 
-    # #Transformer current magnitude
-    # @expression(model,Iphasor,
-    #     [
-    #         Diagonal(Imag)*ur;
-    #         Diagonal(Imag)*ui
-    #     ]
-    # )
+                Ukj = u_k*conj(transpose(u_j))
+                Real_Ukj = real(Ukj)
+                Imag_Ukj = imag(Ukj)
+
+                @constraint(model,X[k,j]== Real_Ukj)
+                @constraint(model,X[k+n_bus,j] == Imag_Ukj)
+                @constraint(model,X[k,j+n_bus] == -Imag_Ukj)
+                @constraint(model,X[k+n_bus,j+n_bus] == Real_Ukj)
+            end
+            
+        end
+    end
     
     #Complex constraints
     for i = 1:n_bus
@@ -138,14 +151,14 @@ function solve_ybus_phasecut(data::YbusPhretData)
     optimize!(model)
    
     #Extract solution, check for uncertainty of the relaxation
+    #X_opt = value.(X)[1:n_bus,1:n_bus] + value.(X[1+n_bus:end,1:n_bus]) .*im
     X_opt = value.(X)
-    #X_opt = value.(X)
-    evals = eigvals(X_opt)
-    if length([e for e in evals if abs(real(e)) > 1e-4]) >1
-        X_opt = calc_closest_rank_r(X_opt,1)
-    end
-    X_hat = X_opt[1:n_bus,1:n_bus] .+ X_opt[n_bus+1:end,1:n_bus] .* im
-    evals,evecs = eigen(X_hat)
+    # evals = eigvals(X_opt)
+    # if length([e for e in evals if abs(real(e)) > 1e-4]) >1
+    #     X_hat = calc_closest_rank_r(X_opt,1)
+    # end
+    #X_hat = X_opt[1:n_bus,1:n_bus] .+ X_opt[n_bus+1:end,1:n_bus] .* im
+    evals,evecs = eigen(X_opt)
     uhat = evecs[:,1] ./ abs.(evecs[:,1])
     
     #reconstruct the current phase, voltage phase, etc.
@@ -177,9 +190,10 @@ and solve with the PhaseCut algorithm.
 """
 function solve_ybus_phasecut!(net::Dict{String,Any})
     data = YbusPhretData(net)
-    sol = solve_ybus_phasecut(data)
+    sol = solve_ybus_phasecut(data,net)
     return sol
 end
+
 
 
 #Vangle_rect = 
@@ -195,3 +209,158 @@ end
 #     #Force rank one to the best possible solution
 #     X_opt = X_rank_one #save the 
 # end
+
+
+function solve_pq_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
+    n_bus,Y,Vmag,Imag = data.n_bus, data.Y, data.Vmag, data.Imag #unpack data
+    Iangle,Vangle = data.Iangle, data.Vangle
+    
+
+    
+    #Bus type idx
+    pq_idx = calc_bus_idx_of_type(net,[1])
+    pv_idx = calc_bus_idx_of_type(net,[2])
+    pq_pv_idx = sort(pq_idx ∪ pv_idx)
+    slack_idx = calc_bus_idx_of_type(net,[3])
+
+    #transformed Y bus
+    Yr,Yi = real.(Y),imag.(Y)
+    T_Y = [Yr -1*Yi;
+            Yi Yr]
+    
+
+    model = Model(Ipopt.Optimizer)
+    set_optimizer_attribute(model, "max_iter", 6000)
+    
+
+    #Construct M matrix (fixed phase representation)
+    M = Diagonal(Imag)*(I - Y * pinv(Y))*Diagonal(Imag)
+    #transformed M matrix
+    Mr,Mi = real.(M),imag.(M)
+    @expression(model,T_M,
+        [
+            Mr -1*Mi; 
+            Mi Mr
+        ]
+    )
+
+    #Complex current
+    @variable(model,I_u_real[1:n_bus])
+    @variable(model,I_u_imag[1:n_bus])
+    for i =1:n_bus 
+        # @constraint(model,I_u_real[i]<= 1)
+        # @constraint(model,I_u_imag[i]<= 1)
+        # @constraint(model,-I_u_real[i]<=0)
+        # @constraint(model,-I_u_imag[i]<=0)
+        @constraint(model,I_u_real[i]^2 + I_u_imag[i]^2 ==1) #Unit circle phase angles
+        if i ∈ pv_idx || i ∈ slack_idx #PV bus current phase angles are known
+            @constraint(model,I_u_real[i] == Imag[i]*cos(Iangle[i]) + 1e-9)
+            @constraint(model,I_u_imag[i] == Imag[i]*sin(Iangle[i]) + 1e-9)
+        end
+    end
+    #Transformed current magnitude
+
+    @expression(model,Iphasor,
+    [
+        Diagonal(Imag)*I_u_real;
+        Diagonal(Imag)*I_u_imag
+    ]
+    )
+
+    # #Complex voltage 
+    # @variable(model,V_u_real[1:n_bus])
+    # @variable(model,V_u_imag[1:n_bus])
+    # for i =1:n_bus
+    #     @constraint(model,V_u_real[i]^2 + V_u_imag[i]^2 ==1) #Unit circle phase angles
+    #     if i ∈ pv_idx || i ∈ slack_idx #PV bus phase angles are known
+    #         @constraint(model,V_u_real[i] == Vmag[i]*cos(Vangle[i]))
+    #         @constraint(model,V_u_imag[i] == Vmag[i]*sin(Vangle[i]))
+    #     end
+    # end
+    # @expression(model,Vphasor,
+    #     [
+    #         Diagonal(Vmag)*V_u_real;
+    #         Diagonal(Vmag)*V_u_imag    
+    #     ]
+    # )
+  
+    #@expression(model,Vphasor,
+    #     pinv(T_Y)*[Diagonal(Imag) zeros(n_bus,n_bus);zeros(n_bus,n_bus) Diagonal(Imag)] *[I_u_real ; I_u_imag]
+    # )
+       
+    
+    
+    #Residual expression
+    # @variable(model,residuals)
+    # @constraint(model,residuals .==  Iphasor .- T_Y*Vphasor    
+    #     #Iphasor[pq_idx] .- (T_Y*[uv_r;uv_im])[pq_idx] #TRY: PQ bus only
+    #     #Iphasor[Union(pq_idx,pv_idx)] .- (T_Y*[uv_r;uv_im])[Union(pq_idx,pv_idx)] #TRY: PQ and PV bus only
+    # )
+    
+    #Objective
+    @objective(model,Min,
+        sum([I_u_real_k*Q_k for (I_u_real_k,Q_k) in zip(I_u_real[pq_idx], (Mr*I_u_real .- Mi*I_u_imag)[pq_idx] )])  
+        -sum([I_u_imag_k*Q_k for (I_u_imag_k,Q_k) in zip(I_u_imag[pq_idx], (Mi*I_u_real .+ Mr*I_u_imag)[pq_idx] )])
+        #sum(residuals.^2)
+    )
+    optimize!(model)
+    return value.(I_u_real) .+ value.(I_u_imag).*im
+end
+
+
+# =====
+# Greedy algorithm
+# =====
+
+struct GreedyYbusPhretSolution
+    data::YbusPhretData
+    u_hat::Vector
+    th_hat::Vector
+    irect_hat::Vector
+    rel_err::Float64
+    u_iter::Vector{Vector{ComplexF64}} #iterations of the greedy algorithm
+end
+"""
+Solve the greedy ybus phasecut problem from "Phase Recovery, Maxcut and Complex Semidefinite Programming"
+"""
+function solve_greedy_ybus_phasecut(data::YbusPhretData;sigma_init_phase=0.1,max_iter=5,ϵ=1e-9)
+    n_bus,Y,Vmag,Imag = data.n_bus,data.Y,data.Vmag,data.Imag #unpack data
+    M = Diagonal(Imag)*(I - Y*pinv(Y))*Diagonal(Imag)
+    #initialize the phase
+    dist_uph = π/2*Normal(0,sigma_init_phase)
+    init_Th = rand(dist_uph,n_bus)
+    u = [Imag_i*cos(θ_i) + Imag_i*sin(θ_i)*im for (Imag_i,θ_i) in zip(Imag,init_Th)]
+    u = [u_i/abs(u_i) for u_i in u]
+    #u_iter = zeros(max_iter,length(u))
+    #u_iter[1,:] = u
+    #while (k>1 && norm(u_iter[k]-norm(u_iter[k-1]))>ϵ) && k<=max_iter
+    #k=1
+    for k=1:max_iter
+        for i=1:n_bus 
+            off_diag_sum = sum([M[j,i]*u[j] for j=1:n_bus if j !== i])
+            if Imag[i] < 1e-3 || norm(u[i])<1e-6
+                u[i] = 1e-6 + 1e-6*im
+                continue
+            end
+            u[i] = (-off_diag_sum)/(abs(off_diag_sum))
+        end
+        #k += 1
+    end
+    return u
+    #u_hat = u_iter[end]
+   # @assert all([abs(u_i)==1 for u_i in u_iter[end]])
+    # return GreedyYbusPhretSolution(
+    #     data,
+    #     u_iter[end],
+    #     angle.(u_iter[end]),
+    #     Diagonal(Imag)*u_hat,
+    #     norm(angle.(u_hat)-data.Iangle)/norm(data.Iangle)*100,
+    #     u_iter
+    # )
+end
+
+function solve_greedy_ybus_phasecut!(net::Dict{String,Any};sigma_init_phase=0.1,max_iter=1000,ϵ=1e-9)
+    data = YbusPhretData(net)
+    u_iter = solve_greedy_ybus_phasecut(data,sigma_init_phase=sigma_init_phase,max_iter=max_iter,ϵ=ϵ)
+    return u_iter
+end

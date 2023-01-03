@@ -31,7 +31,7 @@ using Distributions,Random
 using JuMP
 using LinearAlgebra
 import Ipopt
-include("/home/sam/github/PowerSensitivities.jl/src/sens/nr_sens.jl")
+#include("/home/sam/github/PowerSensitivities.jl/src/sens/nr_sens.jl")
 
 #Set the seed
 Random.seed!(2023)
