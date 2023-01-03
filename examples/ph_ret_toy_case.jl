@@ -18,6 +18,7 @@ A = rand(n,p) + im*randn(n,p)
 x = rand(p) + im*randn(p)
 b = abs.(A*x) + rand(n)
 b_rect = A*x
+u_true = b_rect ./ abs.(b_rect)
 
 M = diagm(b)*(I(n)-A*pinv(A))*diagm(b)
 U = Convex.ComplexVariable(n,n)
@@ -26,9 +27,10 @@ c1 = diag(U) == 1
 c2 = U in :SDP
 p = minimize(objective,c1,c2)
 solve!(p, () -> SCS.Optimizer())
-evaluate(U)
+U_hat = evaluate(U)
+U_true = u_true*conj(u_true')
 
-B, C = eigen(evaluate(U));
+B, C = eigen(U_hat)
 
 u = C[:,1];
 for i in 1:n
