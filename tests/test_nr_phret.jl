@@ -1,15 +1,18 @@
 include("/home/sam/github/PowerSensitivities.jl/src/PowerSensitivities.jl")
-include("/home/sam/Research/PowerPhaseRetrieval/src/PowerPhaseRetrieval.jl")
+include("../src/PowerPhaseRetrieval.jl")
 import .PowerPhaseRetrieval as PPR
 import .PowerSensitivities as PS
 using JuMP,LinearAlgebra,PowerModels
+using ColorSchemes
 using Plots,LaTeXStrings
+using Statistics,Random
 theme(:ggplot2)
 
 #--- Global plotting parameters
-angle_block_figure_path = "/home/sam/Research/PowerPhaseRetrieval/figures/spring_23/est_phase_jacobians/"
-angle_est_figure_path = "/home/sam/Research/PowerPhaseRetrieval/figures/spring_23/est_bus_voltage_phase/"
-phasor_figure_path = "/home/sam/Research/PowerPhaseRetrieval/figures/spring_23/est_bus_phasors/"
+angle_block_figure_path = "figures/spring_23/date_01032023/est_phase_jacobians/"
+angle_est_figure_path = "figures/spring_23/date_01032023/est_bus_voltage_phase/"
+phasor_figure_path = "figures/spring_23/date_01032023/est_bus_phasors/"
+sinusoid_figure_path = "figures/spring_23/date_01032023/est_sinusoids/"
 network_folder = "/home/sam/github/PowerSensitivities.jl/data/radial_test/"
 network_names = ["case14","case24_ieee_rts","case_ieee30","case_RTS_GMLC","case118"]
 network_paths = [network_folder*net_name*".m" for net_name in network_names]
@@ -109,11 +112,12 @@ function plot_estimated_angles(network::Dict{String,Any},sigma_noise::AbstractAr
     for results in sigma_results
         θ_hat = results["th_hat"]
         th_sq_errs = results["th_sq_errs"]
+        th_rel_err = round(results["th_rel_err"],digits=3)
         sigma = results["sigma_noise"]
         yerr = 2*sqrt.(th_sq_errs)
         plot!(
             θ_hat,
-            label=L"$\hat{\theta}_i$ $\sigma =$"*string(sigma*100)*"%",
+            label=L"$\hat{\theta}_i$ $\sigma =$"*string(sigma*100)*"%, rel_err="*string(th_rel_err)*"%",
             line=:dot,
             marker=:square,
             ribbon=yerr,
@@ -128,42 +132,56 @@ function plot_estimated_angles(network::Dict{String,Any},sigma_noise::AbstractAr
     ylabel!(L"Voltage phase angle $\theta_i$ (radians)")
     title!(L"$\hat{\theta}$ by noise level "*string(case_name))
     savefig(angle_fig,angle_est_figure_path*"angle_est_"*string(case_name)*".pdf")
-    return p
+    return angle_fig
 end
 
 
 """
 Plot estimated sinsuoids
 """
-function plot_estimated_sinusoids(results::Dict;t=1:0.01:10,f=60)
+function plot_estimated_sinusoids(results::Dict;t=0:1e-5:1.5/60,f=60,num_bus=5)
     case_name = results["case_name"]
     θ_true,θ_hat = results["th_true"],results["th_hat"]
     v_rect_true,v_rect_hat = results["v_rect_true"],results["v_rect_hat"]
-    vm_true,vm_hat = abs.(v_rect_true),abs.(vm_hat)
-    n = length(vm_true)
-    #Make sinusoid matrices
-    ac_true = zeros(length(t),n)
-    ac_est = zeros(length(t),n)
-
-    for i=1:n
-        ac_true[:,i] = vm_true[i]*cos.(2π*f*t .+ θ_true[i])
-        ac_est[:,i] = vm_hat[i]*cos.(2π*f*t .+ θ_hat[i])
+    vm_true,vm_hat = abs.(v_rect_true),abs.(v_rect_hat)
+    
+    #skip the slack and find the most different elements
+    θ_distinction = [abs(θ_i - mean(θ_true)) for θ_i in θ_true]
+    sel_bus = []
+    for ix=1:num_bus
+        mxval,mxix = findmax(θ_distinction)
+        θ_distinction[mxix] = 0
+        push!(sel_bus,mxix)
     end
 
-    #bus index labels
-    label = [string(i) for i=1:n]
+    #Make sinusoid matrices
+    ac_true = zeros(length(t),num_bus)
+    ac_est = zeros(length(t),num_bus)
 
-    p1= plot(t,
+    for (i,bus_idx) in enumerate(sel_bus)
+        ac_true[:,i] = vm_true[bus_idx]*cos.(2π*f*t .+ θ_true[bus_idx])
+        ac_est[:,i] = vm_hat[bus_idx]*cos.(2π*f*t .+ θ_hat[bus_idx])
+    end
+
+    p1 = plot(t,
         ac_est,
-        label=label,
-        legendtitle="Bus")
-    plot!(t,
-        ac_true,
+        palette=:default,
         legend=false,
-        line=:dash 
+        line=:dash,
+        title=L"est. $\hat{v}_i(t) = |\bar{v}_i|\cos(2 \pi f t - \hat{\theta}_i)$"
     )
-    xlabel!(L"Time $t$ (s)")
-    ylabel!(L"Sinusoid")
+    p2 = plot(t,
+        ac_true,
+        palette=:default,
+        title = L"actual $v(t) = |\bar{v}_i|\cos(2\pi f t - \theta_i)$",
+        label = permutedims([string(idx) for idx in sel_bus]),
+        legend= :outerbottom,
+        legendtitle=L"Bus $i$",
+        xlabel=L"Time $t$ (s)",
+        legend_column=num_bus
+    )
+    p = plot(p1,p2,layout=(2,1))
+    ylabel!(L"AC voltage")
     return p
 end
 
@@ -180,17 +198,17 @@ function plot_phase_estimates(sigma_noise::Real;sel_bus_types=[1])
         #Block angle block estimates
         dpth_true,dqth_true = PS.calc_pth_jacobian(net,sel_bus_types),PS.calc_qth_jacobian(net,sel_bus_types)
         dpth_hat,dqth_hat = results[name]["dpth"],results[name]["dqth"]
+        #Plot estimated blocks
         angle_block_fig = plot_angle_block_comparison(dpth_true,dqth_true,dpth_hat,dqth_hat)
-        
         #Plot estimated angles
-        angle_fig = plot_estimated_angles(results[name])
-        
-        #Plot estimated voltage phasors
-        #phasor_fig = plot_estimated_phasors(results[name])
-
+        angle_fig = plot_estimated_angles(results[name])    
+        #Plot estimated sinusoids
+        sinusoid_fig = plot_estimated_sinusoids(results[name])
+    
         #Save figures
         savefig(angle_block_fig,angle_block_figure_path*"sigma_"*string(sigma_noise)*"_phase_angle_blocks_"*name*".pdf")
         savefig(angle_fig,angle_est_figure_path*"sigma_"*string(sigma_noise)*"_angle_est_"*name*".pdf")
+        savefig(sinusoid_fig,sinusoid_figure_path*"sigma_"*string(sigma_noise)*"_sinus_est_"*name*".pdf")
         #savefig(phasor_fig,phasor_figure_path*"phasor_est_"*name*".pdf")
     end
 end
