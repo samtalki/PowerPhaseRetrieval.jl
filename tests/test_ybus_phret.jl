@@ -3,8 +3,11 @@ import .PowerPhaseRetrieval as PPR
 import PowerModels as PM
 using JuMP,SCS,LinearAlgebra
 
-net = PM.make_basic_network(PM.parse_file("/home/sam/github/PowerSensitivities.jl/data/radial_test/case14.m"))
+net = PM.make_basic_network(PM.parse_file("/home/sam/github/PowerSensitivities.jl/data/radial_test/case24_ieee_rts.m"))
 PM.compute_ac_pf!(net)
+
+n_bus = length(net["bus"])
+
 idx = PPR.calc_bus_idx_of_type(net,[1])
 Y = Matrix(PM.calc_basic_admittance_matrix(net))
 Yr,Yi = real.(Y),imag.(Y)
@@ -12,22 +15,25 @@ T_Y = [Yr -1*Yi;
         Yi Yr]
 
 Yprime = Y[idx,idx]
+
+
 Vrect = PM.calc_basic_bus_voltage(net)
 Vrectprime = Vrect[idx]
 S = PM.calc_basic_bus_injection(net)
 Sprime = S[idx]
 
-Im = abs.(S) ./ abs.(Vrect)
-Imprime = abs.(Sprime) ./ abs.(Vrectprime)
+
+Imag = abs.(S) ./ abs.(Vrect)
+Imagprime = abs.(Sprime) ./ abs.(Vrectprime)
 
 Irect = Y*Vrect
+Iangle = angle.(Irect)
+Imag_true = abs.(Irect)
+@assert Diagonal(Imag_true)*cis.(Iangle) ≈ Irect ≈ Diagonal(Imag)*cis.(Iangle)
+
 Irectprime = Yprime*Vrectprime
-Imprime_true = abs.(Irectprime)
-
-
-n_bus,Y,Vmag,Imag = data.n_bus,data.Y,data.Vmag,data.Imag #unpack data
-Iangle,Vangle = data.Iangle, data.Vangle
-
+Iangleprime = angle.(Irectprime)
+Imagprime_true = abs.(Irectprime)
 
 #Bus type idx
 pq_idx = PPR.PowerSensitivities.calc_bus_idx_of_type(net,[1])
@@ -64,8 +70,8 @@ Mr,Mi = real.(M),imag.(M)
 for k=1:n_bus
     if k ∈ pv_idx || k ∈ slack_idx
         for j =1:n_bus
-            u_k = cos(Iangle[k]) + sin(Iangle[k])*im
-            u_j = cos(Iangle[j]) + sin(Iangle[j])*im
+            u_k = cis(Iangle[k]) #cos(Iangle[k]) + sin(Iangle[k])*im
+            u_j = cis(Iangle[j]) #cos(Iangle[j]) + sin(Iangle[j])*im
 
             Ukj = u_k*conj(transpose(u_j))
             Real_Ukj = real(Ukj)
