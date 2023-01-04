@@ -62,7 +62,13 @@ function est_stochastic_bus_voltage_phase!(network::Dict{String,Any};sel_bus_typ
     sigma_pv = mean(abs.(∂pv_true[abs.(∂pv_true) .> 0]))*sigma_jac
     sigma_qv = mean(abs.(∂pv_true[abs.(∂pv_true) .> 0]))*sigma_jac
     dist_pv,dist_qv = Normal(0,sigma_pv),Normal(0,sigma_qv)
-    ∂pv,∂qv = ∂pv_true + rand(dist_pv,n_bus,n_bus), ∂qv_true + rand(dist_qv,n_bus,n_bus)
+
+    #--- Standard Normal jac noise distribution
+    d_jac = Normal(0,sigma_jac)
+
+    ∂pv = ∂pv_true + rand(d_jac,n_bus,n_bus) #rand(dist_pv,n_bus,n_bus)
+    ∂qv = ∂qv_true + rand(d_jac,n_bus,n_bus) #rand(dist_qv,n_bus,n_bus)
+
 
     #-Compute ground truth voltages
     v_rect_nom = calc_basic_bus_voltage(network)[sel_bus_idx]
@@ -76,6 +82,9 @@ function est_stochastic_bus_voltage_phase!(network::Dict{String,Any};sel_bus_typ
     sigma_p = mean(abs.(p_nom[abs.(p_nom) .> 0]))*sigma_noise
     sigma_q = mean(abs.(q_nom[abs.(q_nom) .> 0]))*sigma_noise
     d_p,d_q = Normal(0,sigma_p),Normal(0,sigma_q)
+
+     #- Standard gaussian noise distribution
+     d_noise = Normal(0,sigma_noise)
 
     #--- Compute a random perturbation around the operating point,
     # noise distributions for p and q:

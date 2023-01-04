@@ -13,12 +13,15 @@ angle_block_figure_path = "figures/spring_23/date_01032023/est_phase_jacobians/"
 angle_est_figure_path = "figures/spring_23/date_01032023/est_bus_voltage_phase/"
 phasor_figure_path = "figures/spring_23/date_01032023/est_bus_phasors/"
 sinusoid_figure_path = "figures/spring_23/date_01032023/est_sinusoids/"
-network_folder = "/home/sam/github/PowerSensitivities.jl/data/radial_test/"
-network_names = ["case14","case24_ieee_rts","case_ieee30","case_RTS_GMLC","case118"]
+network_folder = "data/"
+network_names = ["case14","case24_ieee_rts","case_ieee30","case_RTS_GMLC","case89pegase","case118"]
 network_paths = [network_folder*net_name*".m" for net_name in network_names]
 
+#--- GLOBAL NOISE parameters
 
-function plot_angle_block_comparison(dpth_true,dqth_true,dpth_hat,dqth_hat)
+sigma_noise = [0.1,0.2,0.5]
+
+function plot_angle_block_comparison(case_name::String,dpth_true,dqth_true,dpth_hat,dqth_hat)
     
     dpth_err = norm(dpth_true-dpth_hat)/norm(dpth_true)*100
     dqth_err = norm(dqth_true-dqth_hat)/norm(dqth_true)*100
@@ -26,35 +29,58 @@ function plot_angle_block_comparison(dpth_true,dqth_true,dpth_hat,dqth_hat)
     #--- Make plots
     hp = heatmap(
         dpth_true,
-        title=L"$\frac{\partial p}{\partial \theta}$ (At power flow sol.)",
+        title=case_name*L" $\partial p / \partial \theta$ (at NR sol.)",
         c=:curl,
         ylabel="Bus index",
+        titlefontsize=12,
         )
     hq = heatmap(
         dqth_true,
-        title=L"$\frac{\partial q}{\partial \theta}$ (At power flow sol.)",
+        title=case_name*L" $\partial q / \partial \theta$ (at NR sol.)",
         c=:curl,
-        
+        titlefontsize=12,
         )
     hat_hp = heatmap(
         dpth_hat,
-        title=L"Est. $\frac{\partial p}{\partial \theta}$ Rel. Error:"*string(round(dpth_err,digits=3))*"%",
+        title=L"est. $\partial p / \partial \theta$ (rel. err.:"*string(round(dpth_err,digits=3))*"%)",
         c=:curl,
-        xlabel="Bus index",
-        ylabel="Bus index",
+        xlabel=L"Bus index $i$",
+        ylabel=L"Bus index $i$",
+        titlefontsize=12,
         )
     hat_hq = heatmap(
         dqth_hat,
-        title=L"Est. $\frac{\partial q}{\partial \theta}$ Rel. Error:"*string(round(dqth_err,digits=3))*"%",
+        title=L"est. $\partial q / \partial \theta$ (rel. err.: "*string(round(dqth_err,digits=3))*"%)",
         c=:curl,
-        xlabel="Bus index",
+        titlefontsize=12,
+        xlabel=L"Bus index $i$",
     )
+    err_hp = heatmap(
+        abs.(dpth_true - dpth_hat),
+        title=L"$\partial p / \partial \theta$ elementwise abs. err.",
+        c=:curl,
+        titlefontsize=12,
+        xlabel=L"Bus index $i$",
+        ylabel=L"Bus index $i$"
+    )
+    err_hq = heatmap(
+        abs.(dqth_true - dqth_hat),
+        title=L"$\partial q / \partial \theta$ elementwise abs. err.",
+        titlefontsize=12,
+        c=:curl,
+        xlabel=L"Bus index $i$"
+    )
+
     fig = plot(
-        hp,hq,hat_hp,hat_hq,
+        hp,hq,hat_hp,hat_hq,#err_hp,err_hq,
+        #layout=(2,2),
         titlefontsize=11,
+        grid=false,
         tickfontsize=6,
         labelfontsize=10,
-        grid=true,
+        #plot_title=case_name,
+       # plot_title_fontsize=13,
+       # plot_title_vspace=0.15,
         cb=:best
     )
     return fig
@@ -106,7 +132,7 @@ function plot_estimated_angles(network::Dict{String,Any},sigma_noise::AbstractAr
         lw=2.5,
         ms=3.25,
         alpha=0.85,
-        legend=:bottomleft
+        legend=:best
     )
 
     for results in sigma_results
@@ -117,7 +143,7 @@ function plot_estimated_angles(network::Dict{String,Any},sigma_noise::AbstractAr
         yerr = 2*sqrt.(th_sq_errs)
         plot!(
             θ_hat,
-            label=L"$\hat{\theta}_i$ $\sigma =$"*string(sigma*100)*"%, rel_err="*string(th_rel_err)*"%",
+            label=L"$\sigma =$"*string(sigma)*", rel. err.="*string(th_rel_err)*"%",
             line=:dot,
             marker=:square,
             ribbon=yerr,
@@ -129,8 +155,8 @@ function plot_estimated_angles(network::Dict{String,Any},sigma_noise::AbstractAr
         )
     end
     xlabel!(L"Bus Index $i$")
-    ylabel!(L"Voltage phase angle $\theta_i$ (radians)")
-    title!(L"$\hat{\theta}$ by noise level "*string(case_name))
+    ylabel!(L"Voltage phase angles $\theta_i$ (radians)")
+    title!(string(case_name)*L": $\hat{\theta}$ by meas. noise level")
     savefig(angle_fig,angle_est_figure_path*"angle_est_"*string(case_name)*".pdf")
     return angle_fig
 end
@@ -166,22 +192,41 @@ function plot_estimated_sinusoids(results::Dict;t=0:1e-5:1.5/60,f=60,num_bus=5)
     p1 = plot(t,
         ac_est,
         palette=:default,
-        legend=false,
         line=:dash,
-        title=L"est. $\hat{v}_i(t) = |\bar{v}_i|\cos(2 \pi f t - \hat{\theta}_i)$"
+        ylim=[-1.75,1.75],
+        label = permutedims([string(idx) for idx in sel_bus]),
+        legend= :bottom,
+        legendtitle=L"Bus idx. $i$",
+        legendfontsize=5,
+        legendtitlefontsize=5,
+        legend_column=num_bus,
+        title=L"est. $\hat{v}_i(t) = |\bar{v}_i|\cos(2 \pi f t - \hat{\theta}_i)$",
+        ylabel="AC voltage"
     )
     p2 = plot(t,
         ac_true,
         palette=:default,
         title = L"actual $v(t) = |\bar{v}_i|\cos(2\pi f t - \theta_i)$",
+        ylim=[-1.75,1.75],
         label = permutedims([string(idx) for idx in sel_bus]),
-        legend= :outerbottom,
-        legendtitle=L"Bus $i$",
+        legend= :bottom,
+        legendtitle=L"Bus idx. $i$",
+        legendfontsize=5,
+        legendtitlefontsize=5,
+        legend_column=num_bus,
         xlabel=L"Time $t$ (s)",
-        legend_column=num_bus
+        ylabel="AC voltage"
+        
     )
+    # rmse(x_true,x_hat) = sqrt((1/length(x_true))*sum([abs(x_true_i - x_hat_i)^2 for (x_true_i,x_hat_i) in zip(x_true,x_hat)]))
+    # p3 = plot([i for i=1:length(vm_true)],
+    #     [rmse(ac_true_i,ac_est_i) for (ac_true_i,ac_est_i) in zip(ac_true,ac_est)],#abs.(ac_true .- ac_est),
+    #     xlabel=L"Bus index $i=1,\dots,n$",
+    #     ylabel=L"RMSE",
+    #     line=:stem
+    # )
     p = plot(p1,p2,layout=(2,1))
-    ylabel!(L"AC voltage")
+    
     return p
 end
 
@@ -199,7 +244,7 @@ function plot_phase_estimates(sigma_noise::Real;sel_bus_types=[1])
         dpth_true,dqth_true = PS.calc_pth_jacobian(net,sel_bus_types),PS.calc_qth_jacobian(net,sel_bus_types)
         dpth_hat,dqth_hat = results[name]["dpth"],results[name]["dqth"]
         #Plot estimated blocks
-        angle_block_fig = plot_angle_block_comparison(dpth_true,dqth_true,dpth_hat,dqth_hat)
+        angle_block_fig = plot_angle_block_comparison(name,dpth_true,dqth_true,dpth_hat,dqth_hat)
         #Plot estimated angles
         angle_fig = plot_estimated_angles(results[name])    
         #Plot estimated sinusoids
@@ -215,8 +260,8 @@ end
 
 
 
+
 #-------------- Begin plotting
-sigma_noise = [0.1,0.25,0.50]
 
 #Plot the phase estimates for all sigma noise levels
 for (name,path) in zip(network_names,network_paths)
