@@ -1,7 +1,7 @@
 module PowerPhaseRetrieval
 include("/home/sam/github/PowerSensitivities.jl/src/PowerSensitivities.jl")
 using .PowerSensitivities
-using LinearAlgebra
+using Distributions,Random,Statistics
 
 
 include("core/nr_basic.jl")
@@ -39,10 +39,10 @@ export SensitivityPhaseRetrieval
 export nr_phase_retrieval,nr_phase_retrieval! #Netwon-Raphson standard phase retrieval
 export sdp_sens_phret,maxcut_sens_phret #Senstivitiy matrix phase retrieval.
 #--- Ybus phasecut
-export YbusPhretData
+export YbusPhretData,YbusPhretSolution
 export solve_ybus_phasecut!
-export solve_greedy_ybus_phasecut,solve_greedy_ybus_phasecut!
-export solve_pq_ybus_phasecut
+#export solve_greedy_ybus_phasecut,solve_greedy_ybus_phasecut!
+#export solve_pq_ybus_phasecut
 
 #--- Jacobian-like matrix utilities
 #- Classical AC Power flow Jacobian utilities

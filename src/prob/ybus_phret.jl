@@ -2,7 +2,12 @@
 Ybus phase retrieval problem data
 """
 struct YbusPhretData
+    case_name::String
+    sigma_noise::Float64 #standard deviation of the noise of the current mag measurement
     n_bus::Int
+    slack_idx::Union{AbstractArray,Set}
+    pv_idx::Union{AbstractArray,Set}
+    pq_idx::Union{AbstractArray,Set}
     Y::AbstractMatrix
     Vrect::AbstractArray{Complex}
     Vmag::AbstractArray{Real} #voltage magnitudes
@@ -13,6 +18,7 @@ struct YbusPhretData
     Irect::AbstractArray{Complex}  #Rectangular current phasor ground truth Y*v_rect_groundtruth
     Imag::AbstractArray{Real} #Current magnitude
     Iangle::AbstractArray{Real} #Current angles
+    Imag_obs::AbstractArray{Real} #Observed noisy current magnitudes.
 end
 
 """
@@ -30,66 +36,133 @@ struct YbusPhretSolution
     Irect_rel_err::Real #Relative perctange error  ||Y v_rect_gtruth - Irect_est||_2
     Vangle_rel_err::Real 
     Iangle_rel_err::Real
+    Vangle_sq_err::AbstractArray{Float64}
+    Iangle_sq_err::AbstractArray{Float64}
 end
-
 
 """
 Given a basic network data dict make the ybus phret PROBLMEM DATA
 """
-function YbusPhretData(net::Dict{String,Any};sel_bus_types=[1,2])
-    compute_ac_pf!(net)
-    
-    #Select buses
-    sel_bus_idx = calc_bus_idx_of_type(net,sel_bus_types)
-    n_sel_bus = length(sel_bus_idx) #Get num_bus
-    
+function YbusPhretData(net::Dict{String,Any};sigma_noise=0,mean_noise=0)
+    #---case name
+    case_name = net["name"]
+
+    #Slack buses
+    slack_idx = calc_bus_idx_of_type(net,[3])
+    pq_bus_idx = calc_bus_idx_of_type(net,[1])
+    pv_bus_idx = calc_bus_idx_of_type(net,[2])
     n_bus = length(net["bus"])
 
     #topology params
     Y = Matrix(calc_basic_admittance_matrix(net)) #full admittance matrix
-    Yprime = Matrix(calc_basic_admittance_matrix(net))[sel_bus_idx,sel_bus_idx] #admittance matrix with slack removed
 
     #voltages
     Vrect = calc_basic_bus_voltage(net)
     Vmag,Vangle = abs.(Vrect),angle.(Vrect)
 
-    #powers
+    #----- powers
     s = calc_basic_bus_injection(net)
     p,q = real.(s),imag.(s)
-    
-    #currents
+
+    #----- currents
     Irect = Y*Vrect
     Iangle = angle.(Irect)
-    Imag =  abs.(s) ./ abs.(Vrect)
+    Imag = abs.(Irect)
     
-    # println("Vmag",Vmag)
-    # println("Irect ",Irect)
-    # println("Iangle ",Iangle)
-    # println("Imag",Imag)
+    #--- Compute noisy observations of the current magnitude
+    noise_dist = [] #noise_dist = [Normal(mean_noise,sigma_noise*Imag_i) for Imag_i in Imag] #noise distribution
+    for (i,Imag_i) in enumerate(Imag)
+        if i ∈ pq_bus_idx 
+            push!(noise_dist,Normal(mean_noise,sigma_noise*Imag_i))
+        else
+            push!(noise_dist,Normal(mean_noise,0))
+        end
+    end
+    n = [rand(d_i) for d_i in noise_dist]
+    Imag_obs = abs.(Y*Vrect) .+ n #(sqrt.(p.^2 + q.^2) ./ Vmag)
 
+    #--- Sanity checks
+    #@assert all(abs.(s)./Vmag .≈ Imag)
+    @assert all([n_i ≈ 0.0 for (i,n_i) in enumerate(n) if i ∉ pq_bus_idx]) 
+    @assert Diagonal(Imag)*cis.(Iangle) ≈ Irect ≈ Diagonal(Imag)*cis.(Iangle)
     @assert norm(abs.(Irect) - Imag) <= 1e-3 "Ybus multiplication check failed with "*string(norm(abs.(Irect) - Imag))
 
-    return YbusPhretData(n_bus,Y,Vrect,Vmag,Vangle,s,p,q,Irect,Imag,Iangle)
+    return YbusPhretData(
+        case_name,
+        sigma_noise,
+        n_bus,
+        slack_idx,
+        pv_bus_idx,
+        pq_bus_idx,
+        Y,
+        Vrect,
+        Vmag,
+        Vangle,
+        s,
+        p,
+        q,
+        Irect,
+        Imag,
+        Iangle,
+        Imag_obs
+        )
+end
+
+
+"""
+Given a basic network data dict 
+make the ybus phret data, solve the AC PF, and solve the Ybus PhaseCut algorithm.
+"""
+function solve_ybus_phasecut!(net::Dict{String,Any})
+    compute_ac_pf!(net)
+    data = YbusPhretData(net)
+    sol = solve_ybus_phasecut(data)
+    return sol
+end
+
+# """
+# Given a basic network data dict and a measurement nois level,
+# make the ybus phret data , solve the AC PF, and solve the Ybus PhaseCut algorithm.
+# """
+# function solve_ybus_phasecut!(net::Dict{String,Any},sigma_noise::Float64)
+#     compute_ac_pf!(net)
+#     data = YbusPhretData(net,sigma_noise=sigma_noise)
+#     sol = solve_ybus_phasecut(data)
+#     return sol
+# end
+
+"""
+Given a basic network data dict and an array of measurement noise,
+make the ybus phret data , solve the AC PF, and solve the Ybus PhaseCut algorithm.
+
+Returns Array{YbusPhretSolution}
+"""
+function solve_ybus_phasecut!(net::Dict{String,Any},sigma_noise::Array{Float64})
+    solutions = []
+    for s in sigma_noise
+        compute_ac_pf!(net)
+        data = YbusPhretData(net,sigma_noise=s)
+        sol = solve_ybus_phasecut(data)
+        push!(solutions,sol)
+    end
+    return solutions
 end
 
 
 """
 Given a basic network data dict make the ybus phret MODEL
 """
-function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
-    n_bus,Y,Vmag,Imag = data.n_bus,data.Y,data.Vmag,data.Imag #unpack data
+function solve_ybus_phasecut(data::YbusPhretData)
+    #unpack data
+    n_bus,slack_idx,pq_idx,pv_idx = data.n_bus,data.slack_idx,data.pq_idx,data.pv_idx
+    Y,Vmag,Imag = data.Y,data.Vmag,data.Imag 
+    Irect,Vrect = data.Irect,data.Vrect
     Iangle,Vangle = data.Iangle, data.Vangle
+    Imag_obs = data.Imag_obs #--- Noisy observations
 
-
-    #Bus type idx
-    pq_idx = calc_bus_idx_of_type(net,[1])
-    pv_idx = calc_bus_idx_of_type(net,[2])
-    pq_pv_idx = sort(pq_idx ∪ pv_idx)
-    slack_idx = calc_bus_idx_of_type(net,[3])
-
-
+    #----- Start model
     model = Model(SCS.Optimizer)
-    #set_optimizer_attribute(model, "max_iter", 6000)
+    
     #Complex voltage
     @variable(model,vr[1:n_bus])
     @variable(model,vi[1:n_bus])
@@ -102,7 +175,7 @@ function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
     @variable(model,X[1:2*n_bus,1:2*n_bus], PSD)
 
     #Construct M matrix (fixed phase representation)
-    M = Diagonal(Imag)*(I - Y * pinv(Y))*Diagonal(Imag)
+    M = Diagonal(Imag_obs)*(I - Y * pinv(Y))*Diagonal(Imag_obs)
     #transformed M matrix
     Mr,Mi = real.(M),imag.(M)
     @expression(model,T_M,
@@ -112,21 +185,21 @@ function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
         ]
     )
 
-    #PQ/PV BUS Constraints
+    #Slack bus Constraints
     for k=1:n_bus
-        if k ∈ pv_idx || k ∈ slack_idx
+        if k ∈ slack_idx || k ∈ pv_idx
             for j =1:n_bus
-                u_k = cos(Iangle[k]) + sin(Iangle[k])*im
-                u_j = cos(Iangle[j]) + sin(Iangle[j])*im
+                u_k = cis(Iangle[k]) #cos(Iangle[k]) + sin(Iangle[k])*im
+                u_j = cis(Iangle[j]) #cos(Iangle[j]) + sin(Iangle[j])*im
 
                 Ukj = u_k*conj(transpose(u_j))
-                Real_Ukj = real(Ukj)
-                Imag_Ukj = imag(Ukj)
+                re_Ukj = real(Ukj)
+                im_Ukj = imag(Ukj)
 
-                @constraint(model,X[k,j]== Real_Ukj)
-                @constraint(model,X[k+n_bus,j] == Imag_Ukj)
-                @constraint(model,X[k,j+n_bus] == -Imag_Ukj)
-                @constraint(model,X[k+n_bus,j+n_bus] == Real_Ukj)
+                @constraint(model,X[k,j]== re_Ukj)
+                @constraint(model,X[k+n_bus,j] == im_Ukj)
+                @constraint(model,X[k,j+n_bus] == -im_Ukj)
+                @constraint(model,X[k+n_bus,j+n_bus] == re_Ukj)
             end
             
         end
@@ -136,10 +209,6 @@ function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
     for i = 1:n_bus
         @constraint(model,X[i,i] ==1)
         @constraint(model,X[i+n_bus,i+n_bus]==1)
-        #@constraint(model,X[1:n_bus,i] .== ur*ur[i])
-        #@constraint(model,X[n_bus+1:end,i] .== ui*ur[i])
-        #@constraint(model,X[1:n_bus,i+n_bus] .== -ur.*ui[i])
-        #@constraint(model,X[n_bus+1:end,i+n_bus] .== ui*ui[i])
     end
 
    #Trace objective
@@ -151,21 +220,22 @@ function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
     optimize!(model)
    
     #Extract solution, check for uncertainty of the relaxation
-    #X_opt = value.(X)[1:n_bus,1:n_bus] + value.(X[1+n_bus:end,1:n_bus]) .*im
-    X_opt = value.(X)
-    # evals = eigvals(X_opt)
-    # if length([e for e in evals if abs(real(e)) > 1e-4]) >1
-    #     X_hat = calc_closest_rank_r(X_opt,1)
-    # end
-    #X_hat = X_opt[1:n_bus,1:n_bus] .+ X_opt[n_bus+1:end,1:n_bus] .* im
-    evals,evecs = eigen(X_opt)
-    uhat = evecs[:,1] ./ abs.(evecs[:,1])
-    
+    X_opt = value.(X)[1:n_bus,1:n_bus] + value.(X)[1+n_bus:end,1:n_bus] .*im
+    X_opt = calc_closest_rank_r(X_opt,1)
+    u = X_opt[:,1]
+    u = u ./ abs.(u)
+    @assert all([abs(u_i) ≈ 1 for u_i in u])
+
     #reconstruct the current phase, voltage phase, etc.
-    Iangle_est = angle.(uhat)
-    Irect_est = Diagonal(Imag)*uhat
-    #Irect_est = Imag .* (cos.(Iangle_est) + sin.(Iangle_est)*im)
-    Vrect_est = pinv(Y)*Diagonal(Imag)*uhat
+    Iangle_est = angle.(u)
+    Iangle_est[slack_idx] = Iangle[slack_idx]
+    Iangle_est[pv_idx] = Iangle[pv_idx]
+    #Irect_est = Imag_obs .* cis.(Iangle_est)
+    Irect_est = Diagonal(Imag_obs)*u
+    Irect_est[slack_idx] = Irect[slack_idx]
+    Irect_est[pv_idx] = Irect[pv_idx]
+    #Irect_est = Imag_obs .* (cos.(Iangle_est) + sin.(Iangle_est)*im)
+    Vrect_est = inv(Y)*Irect_est
     Vangle_est = angle.(Vrect_est)
 
     #Return the solution struct
@@ -180,35 +250,15 @@ function solve_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
         norm(Vrect_est - data.Vrect)/norm(data.Vrect)*100,#Vrect_rel_err,
         norm(Irect_est - data.Irect)/norm(data.Irect)*100,#Irect_rel_err,
         norm(Vangle_est - data.Vangle)/norm(data.Vangle)*100,#Vangle_rel_err,
-        norm(Iangle_est - data.Iangle)/norm(data.Iangle)*100#Iangle_rel_er
+        norm(Iangle_est - data.Iangle)/norm(data.Iangle)*100,#Iangle_rel_er
+        abs.(Vangle_est .- data.Vangle).^2, #squared errors
+        abs.(Iangle_est .- data.Iangle).^2 #squared errors
     )
 end
 
-"""
-Given a basic network data dict make the ybus phret data 
-and solve with the PhaseCut algorithm.
-"""
-function solve_ybus_phasecut!(net::Dict{String,Any})
-    data = YbusPhretData(net)
-    sol = solve_ybus_phasecut(data,net)
-    return sol
-end
 
 
-
-#Vangle_rect = 
-# println("Rank of solution: ",rank(X_opt))
-# is_tight,uncertainty = true,nothing
-# if rank(X_opt) > 1
-#     is_tight = false
-#     X_rank_one = calc_closest_rank_r(X_opt,1)
-#     #Compute uncertainty of the relaxation
-#     vecs = eigvecs(X_rank_one)
-#     v = vecs[:,1] ./ norm(vecs[:,1])
-#     uncertainty = diag(X_opt - v*v')
-#     #Force rank one to the best possible solution
-#     X_opt = X_rank_one #save the 
-# end
+#----- Deprecated: PQ bus ybus phasecat
 
 
 function solve_pq_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
@@ -305,62 +355,4 @@ function solve_pq_ybus_phasecut(data::YbusPhretData,net::Dict{String,Any})
     )
     optimize!(model)
     return value.(I_u_real) .+ value.(I_u_imag).*im
-end
-
-
-# =====
-# Greedy algorithm
-# =====
-
-struct GreedyYbusPhretSolution
-    data::YbusPhretData
-    u_hat::Vector
-    th_hat::Vector
-    irect_hat::Vector
-    rel_err::Float64
-    u_iter::Vector{Vector{ComplexF64}} #iterations of the greedy algorithm
-end
-"""
-Solve the greedy ybus phasecut problem from "Phase Recovery, Maxcut and Complex Semidefinite Programming"
-"""
-function solve_greedy_ybus_phasecut(data::YbusPhretData;sigma_init_phase=0.1,max_iter=5,ϵ=1e-9)
-    n_bus,Y,Vmag,Imag = data.n_bus,data.Y,data.Vmag,data.Imag #unpack data
-    M = Diagonal(Imag)*(I - Y*pinv(Y))*Diagonal(Imag)
-    #initialize the phase
-    dist_uph = π/2*Normal(0,sigma_init_phase)
-    init_Th = rand(dist_uph,n_bus)
-    u = [Imag_i*cos(θ_i) + Imag_i*sin(θ_i)*im for (Imag_i,θ_i) in zip(Imag,init_Th)]
-    u = [u_i/abs(u_i) for u_i in u]
-    #u_iter = zeros(max_iter,length(u))
-    #u_iter[1,:] = u
-    #while (k>1 && norm(u_iter[k]-norm(u_iter[k-1]))>ϵ) && k<=max_iter
-    #k=1
-    for k=1:max_iter
-        for i=1:n_bus 
-            off_diag_sum = sum([M[j,i]*u[j] for j=1:n_bus if j !== i])
-            if Imag[i] < 1e-3 || norm(u[i])<1e-6
-                u[i] = 1e-6 + 1e-6*im
-                continue
-            end
-            u[i] = (-off_diag_sum)/(abs(off_diag_sum))
-        end
-        #k += 1
-    end
-    return u
-    #u_hat = u_iter[end]
-   # @assert all([abs(u_i)==1 for u_i in u_iter[end]])
-    # return GreedyYbusPhretSolution(
-    #     data,
-    #     u_iter[end],
-    #     angle.(u_iter[end]),
-    #     Diagonal(Imag)*u_hat,
-    #     norm(angle.(u_hat)-data.Iangle)/norm(data.Iangle)*100,
-    #     u_iter
-    # )
-end
-
-function solve_greedy_ybus_phasecut!(net::Dict{String,Any};sigma_init_phase=0.1,max_iter=1000,ϵ=1e-9)
-    data = YbusPhretData(net)
-    u_iter = solve_greedy_ybus_phasecut(data,sigma_init_phase=sigma_init_phase,max_iter=max_iter,ϵ=ϵ)
-    return u_iter
 end
