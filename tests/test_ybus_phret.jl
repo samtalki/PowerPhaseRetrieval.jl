@@ -7,9 +7,9 @@ using Plots,LaTeXStrings
 theme(:ggplot2)
 
 network_folder = "data/"
-network_names = ["case14","case24_ieee_rts","case_ieee30","case_RTS_GMLC","case118"]
+network_names = ["case14","case24_ieee_rts","case_ieee30","case_RTS_GMLC"]
 network_paths = [network_folder*net_name*".m" for net_name in network_names]
-sigma_noise = [0.01,0.025,0.05]
+sigma_noise = [0.01,0.05,0.1]
 
 #--- figure paths
 Vangle_est_figure_path = "figures/spring_23/ybus/est_bus_voltage_phase/"

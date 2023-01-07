@@ -187,7 +187,7 @@ function solve_ybus_phasecut(data::YbusPhretData)
 
     #Slack bus Constraints
     for k=1:n_bus
-        if k ∈ slack_idx || k ∈ pv_idx
+        if k ∈ slack_idx #|| k ∈ pv_idx
             for j =1:n_bus
                 u_k = cis(Iangle[k]) #cos(Iangle[k]) + sin(Iangle[k])*im
                 u_j = cis(Iangle[j]) #cos(Iangle[j]) + sin(Iangle[j])*im
@@ -217,26 +217,66 @@ function solve_ybus_phasecut(data::YbusPhretData)
         Min,
         tr(T_M*X)
     )
+    set_silent(model)
     optimize!(model)
    
-    #Extract solution, check for uncertainty of the relaxation
+    #Extract solution, 
     X_opt = value.(X)[1:n_bus,1:n_bus] + value.(X)[1+n_bus:end,1:n_bus] .*im
     X_opt = calc_closest_rank_r(X_opt,1)
     u = X_opt[:,1]
     u = u ./ abs.(u)
     @assert all([abs(u_i) ≈ 1 for u_i in u])
 
-    #reconstruct the current phase, voltage phase, etc.
+    #Construct estimated current angles and add slack offset.
     Iangle_est = angle.(u)
-    Iangle_est[slack_idx] = Iangle[slack_idx]
-    Iangle_est[pv_idx] = Iangle[pv_idx]
-    #Irect_est = Imag_obs .* cis.(Iangle_est)
-    Irect_est = Diagonal(Imag_obs)*u
-    Irect_est[slack_idx] = Irect[slack_idx]
-    Irect_est[pv_idx] = Irect[pv_idx]
+
+
+    #--- Current slack bus angle correction
+    # ϕ_offset = abs.(Iangle[slack_idx] - Iangle_est[slack_idx])
+    # if Iangle[slack_idx] < Iangle_est[slack_idx]
+    #     Iangle_est = Iangle_est .- ϕ_offset 
+    # elseif Iangle[slack_idx] > Iangle_est[slack_idx]
+    #     Iangle_est =  Iangle_est .+ ϕ_offset
+    # end
+    #---- Reconstruct complex current
+    Irect_est = Diagonal(Imag_obs)*cis.(Iangle_est) 
+    
+    #@assert all(Diagonal(Imag)*(u./abs.(u)) .≈ Diagonal(Imag)*cis.(Iangle_est))
+
+    #Correct leading/lagging power factors
+    # lead_lag = sign.(Irect)
+    # n_pf_wrong = 0
+    # for (i,(hat_ϕ,ϕ)) in enumerate(zip(Iangle_est,Iangle)) #for (i,(hat_I,I)) in enumerate(zip(Irect_est,Irect))
+    #     if sign(hat_ϕ) !== sign(ϕ) #if sign(imag(hat_I)) !== sign(imag(I))
+    #         Iangle_est[i] = -1*Iangle_est[i]#Irect_est[i] = -1*Irect_est[i]
+    #         n_pf_wrong+=1
+    #     end
+    # end
+    # println(data.case_name*" n_pf_wrong: ",n_pf_wrong)
+    
+    #---------------------------
+    # ----- Post-processing for certain bus types    
+    # Iangle_est[slack_idx] = Iangle[slack_idx]
+    # Iangle_est[pv_idx] = Iangle[pv_idx]
+    # #Irect_est = Imag_obs .* cis.(Iangle_est)
+    # Irect_est[slack_idx] = Irect[slack_idx]
+    # Irect_est[pv_idx] = Irect[pv_idx]
+
+    
     #Irect_est = Imag_obs .* (cos.(Iangle_est) + sin.(Iangle_est)*im)
-    Vrect_est = inv(Y)*Irect_est
+    Vrect_est = Y \ Irect_est
     Vangle_est = angle.(Vrect_est)
+    
+    #--- Voltage slack bus angle correction
+    θ_offset = abs.(Vangle[slack_idx]-Vangle_est[slack_idx])
+    if Vangle[slack_idx] < Vangle_est[slack_idx]
+        Vangle_est = Vangle_est .- θ_offset
+    elseif Vangle[slack_idx] > Vangle_est[slack_idx]
+        Vangle_est =  Vangle_est .+ θ_offset
+    end
+
+    # θ_offset = mean(Vangle[slack_idx] .- Vangle_est[slack_idx])
+    # Vangle_est = θ_offset .+ Vangle_est
 
     #Return the solution struct
     return YbusPhretSolution(

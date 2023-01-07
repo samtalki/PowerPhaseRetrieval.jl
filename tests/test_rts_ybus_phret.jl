@@ -1,7 +1,15 @@
+include("../src/PowerPhaseRetrieval.jl")
+import .PowerPhaseRetrieval as PPR
+import PowerModels as PM
+using LinearAlgebra,Plots
+using Random,Statistics,Distributions
+using JuMP,SCS
+
+sigma_noise = 0.001
 # ------------- 
 # Working Ybus phret algorithm with SDP
 # -------------
-net = PM.make_basic_network(PM.parse_file("/home/sam/github/PowerSensitivities.jl/data/radial_test/case24_ieee_rts.m"))
+net = PM.make_basic_network(PM.parse_file("/home/sam/github/PowerSensitivities.jl/data/radial_test/case_ieee30.m"))
 PM.compute_ac_pf!(net)
 n_bus = length(net["bus"])
 
@@ -9,15 +17,20 @@ Y = Matrix(PM.calc_basic_admittance_matrix(net))
 Vrect = PM.calc_basic_bus_voltage(net)
 Vangle = angle.(Vrect)
 S = PM.calc_basic_bus_injection(net)
-Imag = abs.(Y*Vrect) #abs.(S) ./ abs.(Vrect)
+Imag = abs.(Y*Vrect) + rand(Normal(0,sigma_noise),n_bus)#abs.(S) ./ abs.(Vrect)
 
 Irect = Y*Vrect
 Iangle = angle.(Irect)
 Imag_true = abs.(Irect)
-@assert Diagonal(Imag_true)*cis.(Iangle) ≈ Irect ≈ Diagonal(Imag)*cis.(Iangle)
+
+#Samnity checks
+@assert Diagonal(Imag_true)*cis.(Iangle) ≈ Irect 
+@assert all(Vrect .≈ inv(Y)*Irect)
+@assert all(Vrect .≈ inv(Y)*Diagonal(Imag_true)*cis.(Iangle))
 
 #Bus type idx
 slack_idx = PPR.PowerSensitivities.calc_bus_idx_of_type(net,[3])
+pv_idx = PPR.PowerSensitivities.calc_bus_idx_of_type(net,[2])
 
 model = Model(SCS.Optimizer)
 set_silent(model)
@@ -46,7 +59,7 @@ Mr,Mi = real.(M),imag.(M)
 
 #PQ/PV BUS Constraints
 for k=1:n_bus
-    if k ∈ slack_idx
+    if k ∈ slack_idx || k ∈ pv_idx
         for j =1:n_bus
             u_k = cis(Iangle[k]) #cos(Iangle[k]) + sin(Iangle[k])*im
             u_j = cis(Iangle[j]) #cos(Iangle[j]) + sin(Iangle[j])*im
@@ -88,15 +101,47 @@ Xr1 = PPR.calc_closest_rank_r(X_opt,1)
 u = Xr1[:,1]
 Iangle_est = angle.(u)
 @assert all(Diagonal(Imag)*(u./abs.(u)) .≈ Diagonal(Imag)*cis.(Iangle_est))
+
+#Set slack/pv bus angles
+#Iangle_est[slack_idx] = Iangle[slack_idx]
+#Iangle_est[pv_idx] = Iangle[pv_idx]
+
+ϕ_offset = abs.(Iangle[slack_idx] - Iangle_est[slack_idx])
+Iangle_est = Iangle_est .+ ϕ_offset 
+
 Irect_est = Diagonal(Imag)*cis.(Iangle_est)
-Irest_est_shift = Diagonal(Imag)*cispi.(Iangle_est)
-Vrect_est = inv(Y)*Irect_est
+
+#Correct leading/lagging power factors
+# lead_lag = sign.(Irect)
+# global n_pf_wrong = 0
+# for (i,(hat_I,I)) in enumerate(zip(Irect_est,Irect))
+#     if sign(imag(hat_I)) !== sign(imag(I))
+#         Irect_est[i] = conj(Irect_est[i])
+#         global n_pf_wrong+=1
+#     end
+# end
+# println("n_pf_wrong: ",n_pf_wrong)
+
+
+#--- Set slacks values
+#Irect_est[slack_idx] = Irect[slack_idx]
+#Irect_est[pv_idx] = Irect[pv_idx]
+
+Vrect_est = Y \ Irect_est 
+
+#Vrect_est[slack_idx] = Vrect[slack_idx]
+#Vrect_est[pv_idx] = Vrect[pv_idx]
+
+Vangle_est_aff = angle.(Vrect_est) .+ Iangle[1]
 Vangle_est = angle.(Vrect_est)
-Vrect_est_shift = inv(Y)*Irest_est_shift
+#θ_offset = mean(Vangle[slack_idx] .- Vangle_est[slack_idx])
+#Vangle_est = θ_offset .+ Vangle_est
+#Vangle_est = Vangle_est .+ θ_hat_slack
 
 rel_err(Ahat,Atrue) = string(norm(Ahat-Atrue)/norm(Atrue)*100)
 println("Vrect rel_err: "*rel_err(Vrect_est,Vrect))
-println("Vrect_shift rel_err: "*rel_err(Vrect_est_shift,Vrect))
 println("Irect_est rel_err: "*rel_err(Irect_est,Irect))
-println("Irect_est_shift rel_err: "*rel_err(Irest_est_shift,Irect))
 println("Vangle_est rel err: "*rel_err(Vangle_est,Vangle))
+println("Iangle_est rel_err: "*rel_err(Iangle_est,Iangle))
+
+plot([Vangle Vangle_est Vangle_est_aff],label=["true" "est." "est. aff."],marker=[:circle :square :diamond])
