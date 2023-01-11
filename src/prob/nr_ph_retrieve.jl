@@ -294,35 +294,6 @@ function nr_phase_retrieval(network::Dict,sigma_noise=0.0001,sel_bus_types=[1])
         "dqth_rel_err"=>norm(value.(∂qθ)- ∂qθ_true)/norm(∂qθ_true)*100
     )
 
-    
-    #------------- Old
-    # Trace constraints
-    # @constraint(model,
-    #     #tr(∂pθ) == tr(diagm(Δv)*∂qv - 2*diagm(Δq))
-    #     tr(∂pθ) == tr(diagm(vm_obs)*∂qv - 2*diagm(q_obs))
-    # )
-    # @constraint(model,
-    #     #tr(∂qθ) == tr(-1 .*diagm(Δv)*∂pv + 2*diagm(Δp))
-    #     tr(∂qθ) == tr(-1 .*diagm(vm_obs)*∂pv + 2*diagm(p_obs))
-    # )
-
-    #Injection perturbation variables
-    #@variable(model,Δp[1:n_bus])
-    #@variable(model,Δq[1:n_bus])
-    #@variable(model,Δv[1:n_bus])
-    #@variable(model,Δθ[1:n_bus])
-
-    #Jacobian variables
-    #@variable(model, J[1:2*n_bus,1:2*n_bus])
-    #@variable(model,∂pv[1:n_bus,1:n_bus])
-    #@variable(model,∂qv[1:n_bus,1:n_bus])
-
-    #objective
-    # @variable(model,Xr[1:n,1:n])
-    # @variable(model,Xi[1:n,1:n])
-    # @constraint(model, [Xr Xi; -Xi Xr]>=0,PSDCone())
-    # @objective(model,Min,trc([Mr Mi; -Mi Mr]*[Xr Xi; -Xi Xr]))
-
 end
 
 

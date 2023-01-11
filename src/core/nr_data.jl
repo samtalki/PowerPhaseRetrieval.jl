@@ -31,86 +31,26 @@
 import PowerModels as PM
 import LinearAlgebra as LA
 
-
-
 """
-The Newton-Raphson-Phase Retrieval Power Flow Algorithm. Compatible with basic networks.
+Newton Raphson Power Flow data 
+Supports a single iteration and all iterations.
 """
-function calc_basic_ac_pf_data!(data::Dict{String, Any};tol=1e-4,itr_max=50)
-    n = length(data["bus"])
-    Y = PM.calc_basic_admittance_matrix(data)
-    itr = 0
-
-    
-    rect_v_states,rect_inj_states = [],[]
-    vm_deltas,va_deltas = [],[]
-    mistaches = []
-    p_mismatches,q_mismatches = [],[]
-
-    while itr < itr_max
-
-        #--- STEP 0: Compute grid states and save
-        V = PM.calc_basic_bus_voltage(data) #∈Cⁿ
-        S = PM.calc_basic_bus_injection(data) #∈Cⁿ
-        push!(rect_v_states,V)
-        push!(rect_inj_states,S)
-
-        #--- STEP 1: Compute mismatch and check convergence
-        Δx = calc_basic_mismatch(V,S,Y)
-        
-        #- Save mismatches
-        Δp,Δq = Δx[1:n],Δx[n+1:end]
-        push!(mistaches,Δx)
-        push!(p_mismatches,Δp)
-        push!(q_mismatches,Δq)
-
-        # - Check convergence
-        if LinearAlgebra.normInf(Δx) < tol
-            break
-        end
-        
-        #--- STEP 2 and 3: Compute the jacobian and update step
-        J = PM.calc_basic_jacobian_matrix(data)
-        vph = J \ Δx
-        va,vm = vph[1:n],vph[n+1:end]
-        
-        #- Save changes in grid state
-        push!(va_deltas,va)
-        push!(vm_deltas,vm)
-        
-        # STEP 4 and 5
-        # update voltage variables
-        data = update_voltage_state!(data,vph)
-        # update power variables
-        data = update_injection_state!(data,Δx)
-
-        # update iteration counter
-        itr += 1
-    end
-    if itr == itr_max
-        @assert false "Did not converge, max iteration limit"
-    end
-    problem_data  = Dict(
-        "mismatches"=>mistaches,
-        "p_mismatches"=>p_mismatches,
-        "q_mismatches"=>q_mismatches,
-        "rect_v_states"=>rect_v_states,
-        "rect_inj_states"=>rect_inj_states,
-        "vm_deltas"=>vm_deltas,
-        "va_deltas"=>va_deltas
-    )
-    return problem_data
+struct NRPFData
+    n_bus::Int
+    iter::Int #iteration number k
+    rect_x::Vector{Vector{Complex}} #Rectangular grid state x∈C^n
+    rect_f::Vector{Vector{Complex}} #Rectangular bus mismatches f(x) 
+    delta_va::Vector{Vector{Real}} #Change in voltage angle
+    delta_vm::Vector{Vector{Real}} #Change in voltage mag
+    delta_p::Vector{Vector{Real}} #Change in active power
+    delta_q::Vector{Vector{Real}} #Change in reactive power
 end
 
-"""
-Newton-Raphson power flow data
-"""
-function calc_basic_ac_pf_data!(data;tol=1e-4,itr_max=20)
 
-    rect_xS,rect_fS = [],[]
-    delta_vmS,delta_vaS = [],[]
-    delta_pS,delta_qS = [],[]
-
+"""
+Gets iterative Newton-Raphson power flow data
+"""
+function calc_nr_pf!(data;tol=1e-4,itr_max=20)
 
     bus_num = length(data["bus"])
     gen_num = length(data["gen"])
@@ -125,7 +65,11 @@ function calc_basic_ac_pf_data!(data;tol=1e-4,itr_max=20)
             data["bus"]["$bus_i"]["vm"] = gen["vg"]
         end
     end
-
+    
+    rect_x,rect_f = [],[] #rectangular voltages and complex power injections
+    vm_deltas,va_deltas = [],[]
+    p_mismatches,q_mismatches = [],[]
+    
     Y = calc_basic_admittance_matrix(data)
     itr = 0
 
@@ -134,15 +78,23 @@ function calc_basic_ac_pf_data!(data;tol=1e-4,itr_max=20)
         V = calc_basic_bus_voltage(data)
         S = calc_basic_bus_injection(data)
         Si = V .* conj(Y * V)
-        delta_p, delta_q = real(S - Si), imag(S - Si)
-        if LinearAlgebra.normInf([delta_p; delta_q]) < tol
+        Δp, Δq = real(S - Si), imag(S - Si)
+        push!(p_mismatches,Δp)
+        push!(q_mismatches,Δq)
+        push!(rect_f, Δp .+ Δq.*im)
+
+        if LinearAlgebra.normInf([Δp; Δq]) < tol
             break
         end
 
         # STEP 2 and 3: Compute the jacobian and update step
         J = calc_basic_jacobian_matrix(data)
-        x = J \ [delta_p; delta_q]
-
+        x = J \ [Δp; Δq]
+        va,vm = x[1:bus_num],x[bus_num+1:end]
+        push!(va_deltas,va)
+        push!(vm_deltas,vm)
+        push!(rect_x,vm .* cis.(va))
+        
         # STEP 4
         # update voltage variables
         for i in 1:bus_num
@@ -161,10 +113,10 @@ function calc_basic_ac_pf_data!(data;tol=1e-4,itr_max=20)
             bus_type = data["bus"]["$bus_i"]["bus_type"]
             num_gens = gen_per_bus[bus_i]
             if bus_type == 2
-                data["gen"]["$i"]["qg"] = data["gen"]["$i"]["qg"] - delta_q[bus_i] / num_gens # TODO it is ok for multiples gens in same bus?
+                data["gen"]["$i"]["qg"] = data["gen"]["$i"]["qg"] - Δq[bus_i] / num_gens # TODO it is ok for multiples gens in same bus?
             else bus_type == 3
-                data["gen"]["$i"]["qg"] = data["gen"]["$i"]["qg"] - delta_q[bus_i] / num_gens
-                data["gen"]["$i"]["pg"] = data["gen"]["$i"]["pg"] - delta_p[bus_i] / num_gens
+                data["gen"]["$i"]["qg"] = data["gen"]["$i"]["qg"] - Δq[bus_i] / num_gens
+                data["gen"]["$i"]["pg"] = data["gen"]["$i"]["pg"] - Δp[bus_i] / num_gens
             end
         end
         # update iteration counter
@@ -174,4 +126,86 @@ function calc_basic_ac_pf_data!(data;tol=1e-4,itr_max=20)
         Memento.warn(_LOGGER, "Max iteration limit")
         @assert false
     end
+    return NRPFData(
+        bus_num,
+        itr,
+        rect_x,
+        rect_f,
+        va_deltas,
+        vm_deltas,
+        p_mismatches,
+        q_mismatches
+    )
 end
+
+
+
+# """
+# The Newton-Raphson-Phase Retrieval Power Flow Algorithm. Compatible with basic networks.
+# """
+# function calc_basic_ac_pf_data!(data::Dict{String, Any};tol=1e-4,itr_max=50)
+#     n_bus = length(data["bus"])
+#     Y = PM.calc_basic_admittance_matrix(data)
+#     itr = 0
+
+    
+#     rect_x,rect_f = [],[]
+#     vm_deltas,va_deltas = [],[]
+#     mistaches = []
+#     p_mismatches,q_mismatches = [],[]
+
+#     while itr < itr_max
+
+#         #--- STEP 0: Compute grid states and save
+#         V = PM.calc_basic_bus_voltage(data) #∈Cⁿ
+#         S = PM.calc_basic_bus_injection(data) #∈Cⁿ
+#         push!(rect_x,V)
+#         push!(rect_f,S)
+
+#         #--- STEP 1: Compute mismatch and check convergence
+#         Δx = calc_basic_mismatch(V,S,Y)
+        
+#         #- Save mismatches
+#         Δp,Δq = Δx[1:n_bus],Δx[n_bus+1:end]
+#         push!(mistaches,Δx)
+#         push!(p_mismatches,Δp)
+#         push!(q_mismatches,Δq)
+
+#         # - Check convergence
+#         if LinearAlgebra.normInf(Δx) < tol
+#             break
+#         end
+        
+#         #--- STEP 2 and 3: Compute the jacobian and update step
+#         J = PM.calc_basic_jacobian_matrix(data)
+#         vph = J \ Δx
+#         va,vm = vph[1:n_bus],vph[n_bus+1:end]
+        
+#         #- Save changes in grid state
+#         push!(va_deltas,va)
+#         push!(vm_deltas,vm)
+        
+#         # STEP 4 and 5
+#         # update voltage variables
+#         data = update_voltage_state!(data,vph)
+#         # update power variables
+#         data = update_injection_state!(data,Δx)
+
+#         # update iteration counter
+#         itr += 1
+#     end
+#     if itr == itr_max
+#         @assert false "Did not converge, max iteration limit"
+#     end
+    
+#     return NRPFData(
+#         n_bus,
+#         itr,
+#         rect_x,
+#         rect_f,
+#         vm_deltas,
+#         va_deltas,
+#         p_mismatches,
+#         q_mismatches
+#     )
+# end

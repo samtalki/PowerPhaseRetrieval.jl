@@ -6,7 +6,7 @@ using Distributions,Random,Statistics
 
 include("core/nr_basic.jl")
 include("core/nr_data.jl")
-include("core/nr_linear_approx.jl") #taylor series linear approximations
+#include("core/nr_linear_approx.jl") #taylor series linear approximations
 include("core/nr_sens.jl")
 include("core/structs.jl") #Phase retrieval models
 include("prob/ph_retrieve.jl")

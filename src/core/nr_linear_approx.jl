@@ -1,17 +1,4 @@
-"""
-Newton Raphson Power Flow data 
-Supports a single iteration and all iterations.
-"""
-struct NRPFData
-    n_bus::Int
-    iter::Int #iteration number k
-    rect_x::AbstractArray{Complex} #Rectangular grid state x∈C^n
-    rect_f::AbstractArray{Complex} #Rectangular bus mismatches f(x) 
-    delta_vm::AbstractArray{Real} #Change in voltage mag
-    delta_va::AbstractArray{Real} #Change in voltage angle
-    delta_q::AbstractArray{Real} #Change in reactive power
-    delta_p::AbstractArray{Real} #Change in active power
-end
+
 
 struct NRPFLinearApprox 
     f::Function #linear approximation of the mismatches
