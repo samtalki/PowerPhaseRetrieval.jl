@@ -92,7 +92,8 @@ function plot_estimated_angles(results::Dict)
     θrel_err = results["th_rel_err"]
     th_sq_errs = results["th_sq_errs"]
     #yerr = 2*sqrt.(th_sq_errs)
-    yerr = sqrt.(results["err_cov"])
+    #yerr = sqrt.(results["err_cov"])
+    yerr = results["th_std"]
     f = plot(
         θ_true,
         label=L"$\theta_i$",

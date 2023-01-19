@@ -1,5 +1,7 @@
 """
-Given a PowerModels network and a phase retrieval model, compute the phaseless NR power flow iterations
+Given a PowerModels network and a phase retrieval model, 
+Solves the power flow equations with Newton-Raphson power flow,
+Solving the phase retrieval problem at every iteration.
 """
 function calc_phaseless_nr_pf!(
     net::Dict{String,Any},phret_model::AbstractPhaseRetrievalModel;

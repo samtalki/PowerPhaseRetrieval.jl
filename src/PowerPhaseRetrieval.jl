@@ -14,7 +14,9 @@ include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
 include("prob/rand_nr_phret.jl")
 include("prob/ybus_phret.jl")
+include("prob/ybus_phmax.jl")
 include("io/load_samples.jl")
+
 
 """
 Find the closest rank-R approximate matrix of A

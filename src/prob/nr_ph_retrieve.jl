@@ -139,10 +139,11 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
     err_cov = diag((va_nom .- θ_hat)*(va_nom .- θ_hat)')
     #param covariance
     Je = [
-        value.(∂pθ) ∂pv;
-        value.(∂qθ) ∂qv
+        value.(∂pθ) Matrix(∂pv);
+        value.(∂qθ) Matrix(∂qv)
     ]
-    θcov = inv(Je'*Je)*Je'*va_nom*va_nom'*Je*inv(Je'*Je)
+    th_std = sqrt.(diag((inv(Je'*Je)*Je')*(va_nom*va_nom')*(Je*inv(Je'*Je))))
+    
     
 
     #Return the results dict
@@ -159,6 +160,7 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
         "th_rel_err"=> norm(va_nom- θ_hat)/norm(va_nom)*100,
         "std_err"=>se ,
         "err_cov"=>err_cov,
+        "th_std="=>th_std,
         "dpth_rel_err"=>norm(value.(∂pθ)- ∂pθ_true)/norm(∂pθ_true)*100,
         "dqth_rel_err"=>norm(value.(∂qθ)- ∂qθ_true)/norm(∂qθ_true)*100,
         "v_rect_rel_err"=> norm(v_rect_nom-v_rect_hat)/norm(v_rect_nom)*100
