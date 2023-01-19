@@ -133,6 +133,18 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
     θ_hat = value.(θ)
     v_rect_hat = vm_nom .* (cos.(θ_hat) + sin.(θ_hat) .* im)
 
+    #Construct the standard error:
+    se = sqrt(sum((va_nom.- θ_hat).^2)/(length(θ_hat)-2))
+    #construct covariance of the error
+    err_cov = diag((va_nom .- θ_hat)*(va_nom .- θ_hat)')
+    #param covariance
+    Je = [
+        value.(∂pθ) ∂pv;
+        value.(∂qθ) ∂qv
+    ]
+    θcov = inv(Je'*Je)*Je'*va_nom*va_nom'*Je*inv(Je'*Je)
+    
+
     #Return the results dict
     return Dict(
         "case_name"=>network["name"],
@@ -145,6 +157,8 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
         "dqth"=>value.(∂qθ),
         "th_sq_errs" => (abs.(va_nom .- θ_hat)).^2,
         "th_rel_err"=> norm(va_nom- θ_hat)/norm(va_nom)*100,
+        "std_err"=>se ,
+        "err_cov"=>err_cov,
         "dpth_rel_err"=>norm(value.(∂pθ)- ∂pθ_true)/norm(∂pθ_true)*100,
         "dqth_rel_err"=>norm(value.(∂qθ)- ∂qθ_true)/norm(∂qθ_true)*100,
         "v_rect_rel_err"=> norm(v_rect_nom-v_rect_hat)/norm(v_rect_nom)*100

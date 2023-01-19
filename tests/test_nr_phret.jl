@@ -9,10 +9,10 @@ using Statistics,Random
 theme(:ggplot2)
 
 #--- Global plotting parameters
-angle_block_figure_path = "figures/spring_23/date_01032023/est_phase_jacobians/"
-angle_est_figure_path = "figures/spring_23/date_01032023/est_bus_voltage_phase/"
-phasor_figure_path = "figures/spring_23/date_01032023/est_bus_phasors/"
-sinusoid_figure_path = "figures/spring_23/date_01032023/est_sinusoids/"
+angle_block_figure_path = "figures/spring_23/nr_phret_w_err_cov/est_phase_jacobians/"
+angle_est_figure_path = "figures/spring_23/nr_phret_w_err_cov/est_bus_voltage_phase/"
+phasor_figure_path = "figures/spring_23/nr_phret_w_err_cov/est_bus_phasors/"
+sinusoid_figure_path = "figures/spring_23/nr_phret_w_err_cov/est_sinusoids/"
 network_folder = "data/"
 network_names = ["case14","case24_ieee_rts","case_ieee30","case_RTS_GMLC","case89pegase","case118"]
 network_paths = [network_folder*net_name*".m" for net_name in network_names]
@@ -91,7 +91,8 @@ function plot_estimated_angles(results::Dict)
     θ_true,θ_hat = results["th_true"],results["th_hat"]
     θrel_err = results["th_rel_err"]
     th_sq_errs = results["th_sq_errs"]
-    yerr = 2*sqrt.(th_sq_errs)
+    #yerr = 2*sqrt.(th_sq_errs)
+    yerr = sqrt.(results["err_cov"])
     f = plot(
         θ_true,
         label=L"$\theta_i$",
@@ -140,7 +141,8 @@ function plot_estimated_angles(network::Dict{String,Any},sigma_noise::AbstractAr
         th_sq_errs = results["th_sq_errs"]
         th_rel_err = round(results["th_rel_err"],digits=3)
         sigma = results["sigma_noise"]
-        yerr = 2*sqrt.(th_sq_errs)
+        #yerr = 2*sqrt.(th_sq_errs)
+        yerr = results["err_cov"]
         plot!(
             θ_hat,
             label=L"$\sigma =$"*string(sigma)*", rel. err.="*string(th_rel_err)*"%",
@@ -271,7 +273,7 @@ end
 
 #Plot the individual phase and jacobian estimates for all noise level
 for s in sigma_noise
-    plot_phase_estimates(s)
+    #plot_phase_estimates(s)
 end
 
 
