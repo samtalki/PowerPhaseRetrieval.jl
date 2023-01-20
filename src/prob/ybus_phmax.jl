@@ -1,4 +1,4 @@
-using JuMP,LinearAlgebra,Gurobi
+using JuMP,LinearAlgebra,Gurobi,PowerModels,Ipopt
 struct CurrentPhaseMax
     Y::AbstractMatrix #admittance matrix
     y0::Vector{ComplexF64} #ybus anchor vector
@@ -44,7 +44,7 @@ Given an anchor admittance matrix vector y0 and the phasor voltages, find the
 function calc_romberg_bound(y0,vrect;ϵ=1e-3)
     satisfied = false
     δ_star  = nothing
-    for δ = ϵ:1e-3:1-ϵ
+    for δ = 0.05:ϵ:0.95
         if abs(dot(y0,vrect)) >= δ*norm(y0)*norm(vrect)
             satisfied = true
             δ_star = δ
@@ -57,9 +57,21 @@ end
 
 function solve_ybus_phasemax!(net::Dict)
     data = CurrentPhaseMax(net)
+    n= length(net["bus"])
+    ℓmag = data.ℓmag
+    Y_re,Y_im = real.(data.Y),imag.(data.Y)
     y0_re,y0_im = real.(data.y0),imag.(data.y0)
-    model = Model(Gurobi.Optimizer)
-    @variable(model,vreal[1:n])
-    @variable(model,vimag[1:n])
-    @constraint(model)
+    model = Model(Ipopt.Optimizer)
+    @variable(model,v_re[1:n])
+    @variable(model,v_im[1:n])
+    for i = 1:n
+        yi_re = Y_re[i,:]
+        yi_im = Y_im[i,:]
+        yi_conj = [yi_re ; yi_im]
+        @constraint(model,yi_conj'*[v_re ; v_im]<= ℓmag[i])
+    end
+    @objective(model,Max,[y0_re;y0_im]' * [v_re;v_im])
+    optimize!(model)
+    v_rect_hat = value.(v_re) .+ value.(v_im)*im
+    return v_rect_hat
 end
