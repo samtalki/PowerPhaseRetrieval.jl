@@ -217,7 +217,7 @@ function solve_ybus_phasecut(data::YbusPhretData)
         Min,
         tr(T_M*X)
     )
-    set_silent(model)
+    #set_silent(model)
     optimize!(model)
    
     #Extract solution, 

@@ -72,6 +72,8 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
     sigma_q = mean(abs.(q_nom[abs.(q_nom) .> 0]))*sigma_noise
     d_p,d_q = Normal(0,sigma_p),Normal(0,sigma_q)
 
+    println(network["name"])
+    println("sigmap: ",sigma_p,"sigmaq: ",sigma_q)
     #--- Compute a random perturbation around the operating point,
     # noise distributions for p and q:
     f_x_obs = J_nom*x_nom + [rand(d_p,n_bus);rand(d_q,n_bus)]
@@ -84,6 +86,7 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
 
     #make phase retrieval model
     model = Model(Ipopt.Optimizer)
+    set_silent(model)
 
     #----- Variables and expressions
     #--- Phase VariableS
@@ -133,16 +136,23 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
     θ_hat = value.(θ)
     v_rect_hat = vm_nom .* (cos.(θ_hat) + sin.(θ_hat) .* im)
 
+    #param covariance
+    ∂pθ = value.(∂pθ)
+    ∂qθ = value.(∂qθ)
+    
+    Je = Matrix([
+        ∂pθ ∂pv;
+        ∂qθ ∂qv
+    ])
     #Construct the standard error:
-    se = sqrt(sum((va_nom.- θ_hat).^2)/(length(θ_hat)-2))
+    #se = sqrt(sum((va_nom.- θ_hat).^2)/(length(θ_hat)-2))
+    mse = (1/length(resid))*sum(value.(resid).^2)#(1/length(va_nom))*sum((va_nom.- θ_hat).^2)
+    se = sqrt.(diag(inv(Je'*Je))*mse)[1:n_bus]#sqrt.(diag(inv(Jph'*Jph )) * mse)#sqrt.(diag(inv(∂pθ' * ∂pθ + ∂qθ' * ∂qθ))*mse)
+
     #construct covariance of the error
     err_cov = diag((va_nom .- θ_hat)*(va_nom .- θ_hat)')
-    #param covariance
-    Je = [
-        value.(∂pθ) Matrix(∂pv);
-        value.(∂qθ) Matrix(∂qv)
-    ]
-    th_std = sqrt.(diag((inv(Je'*Je)*Je')*(va_nom*va_nom')*(Je*inv(Je'*Je))))
+
+    #th_std = sqrt.(diag((inv(Je'*Je)*Je')*(va_nom*va_nom')*(Je*inv(Je'*Je))))
     
     
 
@@ -160,7 +170,7 @@ function est_bus_voltage_phase!(network::Dict{String,Any};sel_bus_types=[1],sigm
         "th_rel_err"=> norm(va_nom- θ_hat)/norm(va_nom)*100,
         "std_err"=>se ,
         "err_cov"=>err_cov,
-        "th_std="=>th_std,
+       # "th_std="=>th_std,
         "dpth_rel_err"=>norm(value.(∂pθ)- ∂pθ_true)/norm(∂pθ_true)*100,
         "dqth_rel_err"=>norm(value.(∂qθ)- ∂qθ_true)/norm(∂qθ_true)*100,
         "v_rect_rel_err"=> norm(v_rect_nom-v_rect_hat)/norm(v_rect_nom)*100
