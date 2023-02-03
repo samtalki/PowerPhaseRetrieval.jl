@@ -38,13 +38,15 @@ Supports a single iteration and all iterations.
 struct NRPFData
     n_bus::Int
     iter::Int #iteration number k
-    rect_x::Vector{Vector{Complex}} #Rectangular grid state x∈C^n
-    rect_f::Vector{Vector{Complex}} #Rectangular bus mismatches f(x) 
+    x::Vector{Vector{Complex}} #Rectangular grid state x∈C^n
+    f::Vector{Vector{Complex}} #Rectangular bus mismatches f(x) 
+    S_inj::Vector{Vector{Complex}} #Computed injections at every iteration
+    L_inj::Vector{Vector{Complex}} #Computed current injections at every iteration
     delta_va::Vector{Vector{Real}} #Change in voltage angle
     delta_vm::Vector{Vector{Real}} #Change in voltage mag
     delta_p::Vector{Vector{Real}} #Change in active power
     delta_q::Vector{Vector{Real}} #Change in reactive power
-    jacobians::Vector{PowerFlowJacobian}
+    jacs::Vector{PowerFlowJacobian}
 end
 
 """
@@ -67,6 +69,7 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
     end
     
     rect_x,rect_f = [],[] #rectangular voltages and complex power injections
+    S_inj,L_inj = [],[] #Power and current injections
     vm_deltas,va_deltas = [],[]
     p_mismatches,q_mismatches = [],[]
     jacobians = []
@@ -78,8 +81,12 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
         # STEP 1: Compute mismatch and check convergence
         V = calc_basic_bus_voltage(data)
         S = calc_basic_bus_injection(data)
-        Si = V .* conj(Y * V)
+        Li = conj(Y*V) #Current injection
+        Si = V .* Li
         Δp, Δq = real(S - Si), imag(S - Si)
+        push!(rect_x,V)
+        push!(S_inj,Si)
+        push!(L_inj,Li)
         push!(p_mismatches,Δp)
         push!(q_mismatches,Δq)
         push!(rect_f, Δp .+ Δq.*im)
@@ -95,7 +102,7 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
         va,vm = x[1:bus_num],x[bus_num+1:end]
         push!(va_deltas,va)
         push!(vm_deltas,vm)
-        push!(rect_x,vm .* cis.(va))
+        
         
         # STEP 4
         # update voltage variables
@@ -133,6 +140,8 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
         itr,
         rect_x,
         rect_f,
+        S_inj,
+        L_inj,
         va_deltas,
         vm_deltas,
         p_mismatches,
