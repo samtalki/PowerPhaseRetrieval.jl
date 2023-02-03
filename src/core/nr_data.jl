@@ -44,8 +44,8 @@ struct NRPFData
     delta_vm::Vector{Vector{Real}} #Change in voltage mag
     delta_p::Vector{Vector{Real}} #Change in active power
     delta_q::Vector{Vector{Real}} #Change in reactive power
+    jacobians::Vector{PowerFlowJacobian}
 end
-
 
 """
 Gets iterative Newton-Raphson power flow data
@@ -69,6 +69,7 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
     rect_x,rect_f = [],[] #rectangular voltages and complex power injections
     vm_deltas,va_deltas = [],[]
     p_mismatches,q_mismatches = [],[]
+    jacobians = []
     
     Y = calc_basic_admittance_matrix(data)
     itr = 0
@@ -89,6 +90,7 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
 
         # STEP 2 and 3: Compute the jacobian and update step
         J = calc_basic_jacobian_matrix(data)
+        push!(jacobians,calc_jacobian_matrix(data))
         x = J \ [Δp; Δq]
         va,vm = x[1:bus_num],x[bus_num+1:end]
         push!(va_deltas,va)
@@ -134,7 +136,8 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
         va_deltas,
         vm_deltas,
         p_mismatches,
-        q_mismatches
+        q_mismatches,
+        jacobians
     )
 end
 
