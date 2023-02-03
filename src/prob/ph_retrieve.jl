@@ -92,15 +92,6 @@ function calc_closest_rank_r(A::Matrix,r::Integer)
 end
 
 
-"""
-Construct a rank one matrix X= u * conj(tranpose(u))
-"""
-function variable_rank_one_matrix(n_bus::Int)
-    @variable(model,X[1:n_bus,1:n_bus])
-    @constraint(model, X>=0,PSDCone())
-end
-
-
 
 
 """

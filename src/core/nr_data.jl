@@ -91,13 +91,12 @@ function calc_nr_pf!(data;tol=1e-4,itr_max=20)
         push!(q_mismatches,Δq)
         push!(rect_f, Δp .+ Δq.*im)
 
-        if LinearAlgebra.normInf([Δp; Δq]) < tol
-            break
-        end
-
         # STEP 2 and 3: Compute the jacobian and update step
         J = calc_basic_jacobian_matrix(data)
         push!(jacobians,calc_jacobian_matrix(data))
+        if LinearAlgebra.normInf([Δp; Δq]) < tol
+            break
+        end
         x = J \ [Δp; Δq]
         va,vm = x[1:bus_num],x[bus_num+1:end]
         push!(va_deltas,va)
