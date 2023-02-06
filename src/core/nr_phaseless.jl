@@ -22,7 +22,7 @@ function calc_phaseless_nr_pf(nr_data::NRPFData,sel_bus_idx)
         pk,qk = real.(Sk)[sel_bus_idx],imag.(Sk)[sel_bus_idx]
         ∂pvk,∂qvk = jack.pv[sel_bus_idx,sel_bus_idx],jack.qv[sel_bus_idx,sel_bus_idx]
         ∂pθ_true,∂qθ_true = jack.pth[sel_bus_idx,sel_bus_idx],jack.qth[sel_bus_idx,sel_bus_idx]
-        push!(results,est_bus_voltage_phase(θk,∂pvk,∂qvk,vk,[pk;qk],qk,pk,∂pθ_true,∂qθ_true)) 
+        push!(results,est_bus_voltage_phase(θk,∂pvk,∂qvk,vk,[Δpk;Δqk],qk,pk,∂pθ_true,∂qθ_true)) 
     end
     return results
 end
