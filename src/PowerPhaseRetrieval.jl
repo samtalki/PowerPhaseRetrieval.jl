@@ -8,13 +8,20 @@ include("core/nr_basic.jl")
 include("core/nr_data.jl")
 #include("core/nr_linear_approx.jl") #taylor series linear approximations
 include("core/nr_sens.jl")
-include("core/structs.jl") #Phase retrieval models
+include("core/structs.jl") 
+#--Phase retrieval models
+
 include("prob/ph_retrieve.jl")
+#--- nr pf phret
 include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
 include("prob/rand_nr_phret.jl")
+include("core/nr_phaseless.jl")
+#--- ybus phret
 include("prob/ybus_phret.jl")
 include("prob/ybus_phmax.jl")
+
+#--i/o
 include("io/load_samples.jl")
 
 
@@ -45,6 +52,8 @@ export YbusPhretData,YbusPhretSolution
 export solve_ybus_phasecut!
 #export solve_greedy_ybus_phasecut,solve_greedy_ybus_phasecut!
 #export solve_pq_ybus_phasecut
+#--- Newton-Raphson phase retrieval
+export calc_phaseless_nr_pf,calc_phaseless_nr_pf!
 
 #--- Jacobian-like matrix utilities
 #- Classical AC Power flow Jacobian utilities
