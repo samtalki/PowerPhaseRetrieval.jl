@@ -8,18 +8,36 @@ struct PhaseObservability
     observable::Vector{Bool}
 end
 
+"""
+Given a matrix, returns 2 vectors of booleans for each of row/column gershgorin discs that indicates if they do not contain the origin.
+"""
+function gershdiscs_exclude_origin(A::AbstractMatrix)
+    n = size(A)[1]
+    lhs = []
+    rhs1 = []
+    rhs2 = []
+    for i=1:n
+        push!(lhs,abs(A[i,i]))
+        push!(rhs1,sum([abs(A[k,i]) for k=1:n if k != i]))
+        push!(rhs2,sum([abs(A[i,k]) for k=1:n if k != i]))
+    end
+    return lhs .> rhs1, lhs .> rhs2
+end
 
 function is_gershdisc_invertible(A::AbstractMatrix)
     n = size(A)[1]
-    lhs,rhs = [],[]
+    lhs = []
+    rhs1 = []
+    rhs2 = []
     for i=1:n
         push!(lhs,abs(A[i,i]))
-        push!(rhs,sum([abs(A[k,i]) for k=1:n if k != i]))
+        push!(rhs1,sum([abs(A[k,i]) for k=1:n if k != i]))
+        push!(rhs2,sum([abs(A[i,k]) for k=1:n if k != i]))
     end
-    return all(lhs .> rhs)
+    return all(lhs .> rhs1) || all(lhs .> rhs2)
 end
 
-function is_diagonally_dominant(A::AbstractMatrix)
+function is_row_diagonally_dominant(A::AbstractMatrix)
     n = size(A)[1]
     is = true
     for i=1:n
@@ -29,6 +47,45 @@ function is_diagonally_dominant(A::AbstractMatrix)
     end
     return is
 end
+
+function is_column_diagonally_dominant(A::AbstractMatrix)
+    n = size(A)[1]
+    is = true
+    for i=1:n
+        if sum([abs(A[i,k]) for k=1:n if k != i]) > abs(A[i,i])
+            is = false
+        end    
+    end
+    return is
+end
+
+function is_diagonally_dominant(A::AbstractMatrix)
+    return is_row_diagonally_dominant(A) || is_column_diagonally_dominant(A)
+end
+
+
+"""
+Given a matrix A, compute the Bendixson's lower bound on the imaginary part of the eigenvalues of A.
+https://en.wikipedia.org/wiki/Bendixson%27s_inequality
+
+α = max_{i=1,...,n} (1/2)*|a_{ij} - a_{ji}|
+
+|Im(λ)| ≤ α √((n*(n-1))/2)
+"""
+function bendixsons_lower_bound(A::AbstractMatrix)
+    α = 0
+    n = size(A)[1]
+    for i=1:n
+        for j=1:n
+            if i != j
+                α = max(α,abs(A[i,j]-A[j,i])/2)
+            end
+        end
+    end
+    return α*sqrt((n*(n-1))/2)
+end
+
+
 
 row_offdiag_sum(A) = [sum([abs(A[k,i]) for k=1:size(A)[1] if k != i]) for i=1:size(A)[1]]
 col_offdiag_sum(A) = [sum([abs(A[i,k]) for k=1:size(A)[1] if k != i]) for i=1:size(A)[1]]
@@ -79,20 +136,56 @@ function is_jacobian_invertible(net::Dict,sel_bus_types=[1])
     p,q = real.(PM.calc_basic_bus_injection(net))[sel_bus_idx],imag.(PM.calc_basic_bus_injection(net))[sel_bus_idx]
     Spv,Sqv = J.pv[sel_bus_idx,sel_bus_idx],J.qv[sel_bus_idx,sel_bus_idx]
     @assert length(v) == length(q) == size(Sqv)[1] == size(Sqv)[2] == size(Spv)[1] == size(Spv)[2]
-    rhs,lhs,observable = [],[],[]
+    rhs1,lhs1 = [],[]
+    rhs2,lhs2 = [],[]
+    observable = zeros(Bool,n_bus)
+    #---- row sum condition
     for i =1:n_bus
-        push!(lhs,
-            (1+v[i])*(abs(Sqv[i,i] - Spv[i,i])) + 2*(abs(q[i])-abs(p[i]))
+        push!(lhs1,
+            2*(abs(p[i]) + abs(q[i]))
         )
-        push!(rhs,
-            (1+v[i])*(sum(abs(Sqv[k,i] + Spv[k,i]) for k=1:n_bus if k!=i))
+        push!(rhs1,
+            v[i]*(abs(Spv[i,i]) - abs(Sqv[i,i])) + (1+v[i])*sum([abs(Spv[k,i]) for k=1:n_bus if k!=i])
         )
-        push!(observable,
-            lhs[i] >= rhs[i]
+        push!(lhs2,
+            abs(Sqv[i,i])
         )
+        push!(rhs2,
+            sum(abs.(Spv[:,i])) + sum(abs(Sqv[k,i]) for k=1:n_bus if k!=i)
+        )
+        observable[i]= lhs1[i] >= rhs1[i] && lhs2[i] >= rhs2[i] #update observability
+    end
+    #--- column sum condition
+    rhs1,lhs1 = [],[]
+    rhs2,lhs2 = [],[]
+    for i=1:n_bus
+        push!(lhs1,
+            2*abs(q[i])
+        )
+        push!(rhs1,
+            sum(abs.(Spv[i,:])) + sum(v[k]*abs(Sqv[i,k]) for k=1:n_bus if k!=i) - v[i]*abs(Sqv[i,i])
+        )
+        push!(lhs2,
+            2*abs(p[i])
+        )
+        push!(rhs2,
+            sum(v[k]*abs(Spv[i,k]) for k=1:n_bus) + sum(abs(Sqv[i,k]) for k=1:n_bus if k!= i) - abs(Sqv[i,i])
+        )
+        #-- update the observability condition to see if the column sum gives more information than the row sum
+        if observable[i] == 0
+            observable[i] = lhs1[i] >= rhs1[i] && lhs2[i] >= rhs2[i]
+        else
+            observable[i] = observable[i]
+        end
     end
     return observable
 end
+
+
+
+#---------
+# broken invertibility bounds
+#-------
 
 """
 Inequality 1 for the jacobian invertibility conditions

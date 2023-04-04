@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 
-real_time_load_data = "/home/sam/Research/PowerPhaseRetrieval/data/RTS-GMLC-timeseries/REAL_TIME_regional_Load.csv"
-day_ahead_load_data = "/home/sam/Research/PowerPhaseRetrieval/data/RTS-GMLC-timeseries/DAY_AHEAD_regional_Load.csv"
-bus_file = "/home/sam/Research/PowerPhaseRetrieval/data/RTS-GMLC-timeseries/bus.csv"
+real_time_load_data = "/home/sam/research/PowerPhaseRetrieval.jl/data/RTS-GMLC-timeseries/REAL_TIME_regional_Load.csv"
+day_ahead_load_data = "DAY_AHEAD_regional_Load.csv"
+bus_file = "/home/sam/research/PowerPhaseRetrieval.jl/data/RTS-GMLC-timeseries/bus.csv"
 
 def get_rts_load_fractions(bus_df):
     fractions  = pd.DataFrame(columns=["Bus ID","Area","MW Fraction","MVAR Fraction"])
@@ -66,3 +66,15 @@ def get_rts_nodal_data_day_ahead(bus_file=bus_file,day_ahead_load_data=day_ahead
         nodal_mw_data[bus_id] = fraction*load_df[str(bus_zone)] 
         nodal_mvar_data[bus_id] = nodal_mw_data[bus_id]*np.tan(np.arccos(bus_power_factor))
     return nodal_mw_data,nodal_mvar_data
+
+
+def main():
+    nodal_mw_data,nodal_mvar_data = get_rts_nodal_data_realtime()
+    nodal_mw_data_day_ahead,nodal_mvar_data_day_ahead = get_rts_nodal_data_day_ahead()
+    nodal_mw_data.to_csv("/home/sam/research/PowerPhaseRetrieval.jl/data/RTS-GMLC-timeseries/nodal-realtime/nodal_mw_data.csv")
+    nodal_mvar_data.to_csv("/home/sam/research/PowerPhaseRetrieval.jl/data/RTS-GMLC-timeseries/nodal-realtime/nodal_mvar_data.csv")
+    nodal_mw_data_day_ahead.to_csv("/home/sam/research/PowerPhaseRetrieval.jl/data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mw_data.csv")
+    nodal_mvar_data_day_ahead.to_csv("/home/sam/research/PowerPhaseRetrieval.jl/data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mvar_data.csv")
+
+
+main()
