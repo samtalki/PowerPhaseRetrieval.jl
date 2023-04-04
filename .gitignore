@@ -1,2 +1,6 @@
 data/pglib_opf_case118_ieee.csv:Zone.Identifier
 data/pglib_opf_case118_ieee.csv
+data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mvar_data.csv
+data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mw_data.csv
+data/RTS-GMLC-timeseries/nodal-realtime/nodal_mvar_data.csv
+data/RTS-GMLC-timeseries/nodal-realtime/nodal_mw_data.csv
