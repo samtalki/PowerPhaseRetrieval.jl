@@ -6,6 +6,7 @@ struct PhaseObservability
     rhs_row::Vector{Float64}
     rhs_col::Vector{Float64}
     observable::Vector{Bool}
+    strong_observable::Vector{Bool}
 end
 
 """
@@ -64,35 +65,45 @@ function is_diagonally_dominant(A::AbstractMatrix)
 end
 
 
-"""
-Given a matrix A, compute the Bendixson's lower bound on the imaginary part of the eigenvalues of A.
-https://en.wikipedia.org/wiki/Bendixson%27s_inequality
 
-α = max_{i=1,...,n} (1/2)*|a_{ij} - a_{ji}|
 
-|Im(λ)| ≤ α √((n*(n-1))/2)
-"""
-function bendixsons_lower_bound(A::AbstractMatrix)
-    α = 0
-    n = size(A)[1]
-    for i=1:n
-        for j=1:n
-            if i != j
-                α = max(α,abs(A[i,j]-A[j,i])/2)
-            end
-        end
+function dpdth_observability(net::Dict;sel_bus_types =[1])
+    sel_bus_idx = PPR.calc_bus_idx_of_type(net,sel_bus_types)
+    n_bus = length(sel_bus_idx)
+    J = PPR.calc_jacobian_matrix(net)
+    v = abs.(PM.calc_basic_bus_voltage(net))[sel_bus_idx]
+    q = imag.(PM.calc_basic_bus_injection(net))[sel_bus_idx]
+    Sqv = J.qv[sel_bus_idx,sel_bus_idx]
+    @assert length(v) == length(q) == size(Sqv)[1] == size(Sqv)[2]
+    rhs_col,rhs_row = [],[]
+    lhs = []
+    observable,strong_observable = [],[]
+    for i=1:n_bus
+        push!(lhs,
+            abs(v[i]*Sqv[i,i] - 2*q[i])
+        )
+        push!(rhs_row,
+            sum([v[i]*abs(Sqv[k,i]) for k =1:n_bus if k!= i])  
+        )
+        push!(rhs_col,
+            sum([abs(Sqv[i,k]*v[k]) for k=1:n_bus if k!=i])
+        )
+        push!(observable,
+            (lhs[i] >= rhs_row[i]) || (lhs[i] >= rhs_col[i])
+        )
+        push!(strong_observable,
+            abs(q[i]) >= 0.5*v[i]*(sum([abs(Sqv[k,i]) for k=1:n_bus if k!= i])- abs(Sqv[i,i])) || abs(q[i]) >= 0.5*(sum([abs(Sqv[k,i])*v[k] for k=1:n_bus if k!= i])- abs(Sqv[i,i]))   
+        )
     end
-    return α*sqrt((n*(n-1))/2)
+    return PhaseObservability(
+        lhs,rhs_row,rhs_col,observable,strong_observable
+    )
 end
-
-
 
 row_offdiag_sum(A) = [sum([abs(A[k,i]) for k=1:size(A)[1] if k != i]) for i=1:size(A)[1]]
 col_offdiag_sum(A) = [sum([abs(A[i,k]) for k=1:size(A)[1] if k != i]) for i=1:size(A)[1]]
 
-"""
-Given a PowerModels network dict, compute the Δθ recovery guarantee bounds.
-"""
+
 function calc_phase_observability(net::Dict;sel_bus_types =[1])
     sel_bus_idx = PPR.calc_bus_idx_of_type(net,sel_bus_types)
     n_bus = length(sel_bus_idx)
@@ -102,11 +113,12 @@ function calc_phase_observability(net::Dict;sel_bus_types =[1])
     Sqv = J.qv[sel_bus_idx,sel_bus_idx]
     @assert length(v) == length(q) == size(Sqv)[1] == size(Sqv)[2]
     rhs_col,rhs_row = [],[]
-    lhs,observable = [],[]
+    lhs,observable,strong_observable = [],[],[]
     for i = 1:n_bus
         push!(lhs,
-            #abs(-v[i]*Sqv[i,i] +2*q[i]) + abs(Sqv[i,i])
-            abs(v[i]*Sqv[i,i]) + 2*abs.(q[i]) + abs(Sqv[i,i])
+            #abs(v[i]*Sqv[i,i]) + 2*abs.(q[i]) + abs(Sqv[i,i])
+            #abs(Sqv[i,i]) + abs(v[i]*Sqv[i,i] - 2*q[i])
+            abs(Sqv[i,i]*v[i] - 2*q[i])
         )
         push!(rhs_row,
             #sum([(1+v[k])*abs(Sqv[i,k]) for k =1:n_bus if k!=i])
@@ -116,14 +128,26 @@ function calc_phase_observability(net::Dict;sel_bus_types =[1])
             sum([(1+v[k])*abs(Sqv[i,k]) for k =1:n_bus if k!=i])
         )
         push!(observable,
+            #abs(q[i]) >= 0.5*v[i]*(sum([abs(Sqv[k,i]) for k=1:n_bus if k!= i])- abs(Sqv[i,i]))
             (lhs[i] >= rhs_row[i]) || (lhs[i] >= rhs_col[i])
             #abs(q[i]) >=  (1/2)*(1+v[i])*(sum([abs(Sqv[k,i]) for k=1:n_bus if k!=i])- abs(Sqv[i,i]))
         )
+        push!(strong_observable,
+            #abs(q[i]) >= 0.5*v[i]*(sum([abs(Sqv[k,i]) for k=1:n_bus if k!= i])- abs(Sqv[i,i]))    
+            (abs(q[i]) >= 0.5*(1+v[i])*(sum([abs(Sqv[k,i]) for k=1:n_bus if k!=i])- abs(Sqv[i,i]))) || ((1+v[i])*abs(Sqv[i,i]) + 2*abs(q[i])>=sum([(1+v[k])*abs(Sqv[i,k]) for k =1:n_bus if k!=i]))
+        )
     end
     return PhaseObservability(
-        lhs,rhs_row,rhs_col,observable
+        lhs,rhs_row,rhs_col,observable,strong_observable
     )
 end
+
+function calc_phase_observability!(net::Dict) 
+    PM.compute_ac_pf!(net) 
+    return calc_phase_observability(net)
+end
+
+
 
 """
 Given a network dict, determine the jacobian is invertible without the phase angles needed.
@@ -311,4 +335,25 @@ function jacobian_ineq_2(net::Dict,sel_bus_types=[1])
         )
     end
     return observable
+end
+
+"""
+Given a matrix A, compute the Bendixson's lower bound on the imaginary part of the eigenvalues of A.
+https://en.wikipedia.org/wiki/Bendixson%27s_inequality
+
+α = max_{i=1,...,n} (1/2)*|a_{ij} - a_{ji}|
+
+|Im(λ)| ≤ α √((n*(n-1))/2)
+"""
+function bendixsons_lower_bound(A::AbstractMatrix)
+    α = 0
+    n = size(A)[1]
+    for i=1:n
+        for j=1:n
+            if i != j
+                α = max(α,abs(A[i,j]-A[j,i])/2)
+            end
+        end
+    end
+    return α*sqrt((n*(n-1))/2)
 end
