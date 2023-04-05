@@ -92,7 +92,9 @@ function dpdth_observability(net::Dict;sel_bus_types =[1])
             (lhs[i] >= rhs_row[i]) || (lhs[i] >= rhs_col[i])
         )
         push!(strong_observable,
-            abs(q[i]) >= 0.5*v[i]*(sum([abs(Sqv[k,i]) for k=1:n_bus if k!= i])- abs(Sqv[i,i])) || abs(q[i]) >= 0.5*(sum([abs(Sqv[k,i])*v[k] for k=1:n_bus if k!= i])- abs(Sqv[i,i]))   
+            2*abs(q[i]) + v[i]*abs(Sqv[i,i]) >= sum([v[i]*abs(Sqv[k,i]) for k=1:n_bus if k!= i])
+            || 
+            2*abs(q[i]) +  v[i]*abs(Sqv[i,i]) >= sum([v[k]*abs(Sqv[i,k]) for k=1:n_bus if k!= i])
         )
     end
     return PhaseObservability(
