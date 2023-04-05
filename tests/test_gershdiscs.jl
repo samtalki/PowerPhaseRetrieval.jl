@@ -36,7 +36,9 @@ for case in cases
 
     # save the recoverabilities
     phase_recoverable[case] = case_results[case]["phase_recoverable"].observable
-    strong_phase_recoverable[case] = case_results[case]["phase_recoverable"].strongly_observable
+    strong_phase_recoverable[case] = case_results[case]["phase_recoverable"].strong_observable
+    pct_phase_recoverable[case] = sum(phase_recoverable[case])/length(phase_recoverable[case])
+    pct_strong_phase_recoverable[case] = sum(strong_phase_recoverable[case])/length(strong_phase_recoverable[case])
     jac_recoverable[case] = case_results[case]["jac_recoverable"]
 
 end
