@@ -3,6 +3,7 @@
 # My strong believe is that the method will be robust enough to generate the matrices and phase retrieval that have small error. 
 
 include("../src/PowerPhaseRetrieval.jl")
+include("../src/vis/realtime.jl")
 import .PowerPhaseRetrieval as PPR
 using PowerModels,LinearAlgebra,Plots
 using DataFrames,CSV
@@ -127,22 +128,24 @@ end
 Calculates the root mean squared error of the estimated voltage phase angles estimated in each hourly interval
 with the true phase angles using the 5minute data.
 """
-function calc_hourly_rms_error(hourly_phret_results::Vector,realtime_phase_angles::Vector)
+function calc_hourly_mean_relative_error(hourly_phret_results::Vector,realtime_phase_angles::Vector)
     @assert length(realtime_phase_angles) == 12*length(hourly_phret_results)
-    hourly_rms_error = []
-    for i=1:length(hourly_phret_results)
-        # calculate the hourly rms error
-        hourly_rms_error_t = 0
-        est_va_t = hourly_phret_results[i]
-        for j=1:12
-            t = (i-1)*12 + j
-            true_va_t = realtime_phase_angles[t]
-            hourly_rms_error_t += sum((est_va_t - true_va_t).^2)
+    real_time_rel_errs = []
+    for hr=1:length(hourly_phret_results)
+
+        #get the forecasted θ for this hour
+        θ_hat_hr = hourly_phret_results[hr] 
+
+        #get all of the real time θs for this hour
+        θ_hr = realtime_phase_angles[12*(hr-1)+1:12*hr]
+        @assert length(θ_hr) == 12
+
+        #calculate the individual relative error for each 5 minute interval
+        for i=1:12
+            push!(real_time_rel_errs,norm(θ_hat_hr - θ_hr[i])/norm(θ_hr[i]))
         end
-        hourly_rms_error_t = sqrt(hourly_rms_error_t/12)
-        push!(hourly_rms_error,hourly_rms_error_t)
     end
-    return hourly_rms_error
+    return real_time_rel_errs
 end
 
 
@@ -172,23 +175,22 @@ hourly_load_updates = generate_updates(net,hourly_mw_data,hourly_mvar_data)
 vms,vas,ps,qs,jacs = generate_phase_retrieval_data(net,hourly_load_updates)
 
 #---------------- generate real time power flow angle data
-# #--- load the real time data
-# m_5mins = 12*m_hours
-# inst_mvar_data = DataFrame(CSV.File("data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mvar_data.csv"))
-# inst_mw_data = DataFrame(CSV.File("data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mw_data.csv"))
+#--- load the real time data
+m_5mins = 12*m_hours
+inst_mvar_data = DataFrame(CSV.File("data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mvar_data.csv"))
+inst_mw_data = DataFrame(CSV.File("data/RTS-GMLC-timeseries/nodal-dayahead/nodal_mw_data.csv"))
 
-# # remove time index column
-# time_idx,inst_mw_data = inst_mw_data[1:m_5mins,1],inst_mw_data[1:m_5mins,2:end]
-# time_idx,inst_mvar_data = inst_mvar_data[1:m_5mins,1],inst_mvar_data[1:m_5mins,2:end]
+# remove time index column
+time_idx,inst_mw_data = inst_mw_data[1:m_5mins,1],inst_mw_data[1:m_5mins,2:end]
+time_idx,inst_mvar_data = inst_mvar_data[1:m_5mins,1],inst_mvar_data[1:m_5mins,2:end]
 
-# #--- generate the real time va data
-# realtime_load_updates = generate_updates(net,inst_mw_data,inst_mvar_data)
-# realtime_vas = generate_realtime_va_data(net,realtime_load_updates)
+#--- generate the real time va data
+realtime_load_updates = generate_updates(net,inst_mw_data,inst_mvar_data)
+realtime_vas = generate_realtime_va_data(net,realtime_load_updates)
 
 
 # # test the phase retrieval problem sequentially using the averaged data
-hourly_phret_results = test_sequential_est_bus_voltage_phase(vms,vas,ps,qs,jacs)
-    #D_f_x=Normal(0,1e-3),D_vm=Normal(0,1e-4))
+hourly_phret_results = test_sequential_est_bus_voltage_phase(vms,vas,ps,qs,jacs)#,D_f_x=Normal(0,1e-3),D_vm=Normal(0,1e-4))
 
 # calculate the rms error
 est_hourly_vas = [result["th_hat"] for result in hourly_phret_results]
@@ -196,10 +198,26 @@ rel_err_hourly_vas = [result["th_rel_err"] for result in hourly_phret_results]
 
 
 # calculate the 
-#hourly_rms_error = calc_hourly_rms_error(est_hourly_vas,realtime_vas)
+real_time_rel_errs = calc_hourly_mean_relative_error(est_hourly_vas,realtime_vas)
+
+# plot the results
+bus_idx = 5
+h= 1
+θ_inst_t =  [e_t[bus_idx] for e_t in realtime_vas]
+θ_hat_inst_hr = [] #averaged estimates for the angles at each hour sampled over the 5min granularity time scale
+for h = 1:m_hours
+    for t =1:12
+        push!(θ_hat_inst_hr,est_hourly_vas[h][bus_idx])
+    end
+end
+p = plot_avg_vs_inst_tseries(θ_hat_inst_hr,θ_inst_t)
+savefig(p,"avg_test.pdf")
 
 
-#--- test the jacobian symmetry at the first time step
-dpv1,dqv1 = Matrix(jacs[1].pv),Matrix(jacs[1].qv)
-dpth1,dqth1 = Matrix(jacs[1].pth),Matrix(jacs[1].qth)
-dpξ,dqξ = calc_augmented_angle_jacobians(vms[1],ps[1],qs[1],dpv1,dqv1)
+# #--- test the jacobian symmetry at the first time step
+# dpv1,dqv1 = Matrix(jacs[1].pv),Matrix(jacs[1].qv)
+# dpth1,dqth1 = Matrix(jacs[1].pth),Matrix(jacs[1].qth)
+# dpξ,dqξ = calc_augmented_angle_jacobians(vms[1],ps[1],qs[1],dpv1,dqv1)
+
+# #--- calculate the errors
+
