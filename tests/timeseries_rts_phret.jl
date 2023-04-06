@@ -201,17 +201,20 @@ rel_err_hourly_vas = [result["th_rel_err"] for result in hourly_phret_results]
 real_time_rel_errs = calc_hourly_mean_relative_error(est_hourly_vas,realtime_vas)
 
 # plot the results
-bus_idx = 5
-h= 1
-θ_inst_t =  [e_t[bus_idx] for e_t in realtime_vas]
-θ_hat_inst_hr = [] #averaged estimates for the angles at each hour sampled over the 5min granularity time scale
-for h = 1:m_hours
-    for t =1:12
-        push!(θ_hat_inst_hr,est_hourly_vas[h][bus_idx])
+for bus_idx = 1:5
+    θ_inst_5min =  [e_t[bus_idx] for e_t in realtime_vas]
+    θ_hat_inst_hr = [] #averaged estimates for the angles at each hour repeatedly applied over the 5min granularity time scale
+    θ_inst_hr = [] #real time averaged angles applied repeatedly over the 5min granularity time scale
+    for h = 1:m_hours
+        for t =1:12
+            push!(θ_hat_inst_hr,est_hourly_vas[h][bus_idx])
+            push!(θ_inst_hr,vas[h][bus_idx])
+        end
     end
+    p = plot_avg_vs_inst_tseries(θ_hat_inst_hr,θ_inst_hr,θ_inst_5min)
+    savefig(p,"figures/avg_vs_inst_$(bus_idx).pdf")
 end
-p = plot_avg_vs_inst_tseries(θ_hat_inst_hr,θ_inst_t)
-savefig(p,"avg_test.pdf")
+
 
 
 # #--- test the jacobian symmetry at the first time step
