@@ -4,22 +4,21 @@ function plot_avg_vs_inst_tseries(est_averaged_data::Vector,act_average_data::Ve
     
     # check periodic properties
     T = length(realtime_data) # total number of data points
-    period = Integer(length(realtime_data)/length(est_averaged_data)) # number of data points per period
-    @assert period*length(est_averaged_data) == T
-    @assert length(est_averaged_data) == length(realtime_data)/period
+    @assert length(est_averaged_data) == length(act_average_data) == length(realtime_data) == T
 
     # plot the data
     p = plot(
         1:T,
         est_averaged_data,
         legend=true,
-        label=L"$\bar{\theta}$ (hourly)",
-        lw=2
+        label=L"$\hat{\theta}$ (15m)",
+        lw=2,
+        la=0.5
     )
     plot!(
         1:T,
         act_average_data,
-        label=L"$\bar{\theta}$ (5 min)",
+        label=L"$\bar{\theta}$ (15 min)",
         lw=2,
         la=0.5,
         ls=:dot
@@ -29,8 +28,8 @@ function plot_avg_vs_inst_tseries(est_averaged_data::Vector,act_average_data::Ve
         realtime_data,
         label=L"$\theta_t$ (5 min)",
         seriestype=:scatter,
-        ls=:dash,
-        ms=1,
+        mcolor=:black,
+        ms=2,
         ma=0.5,
     )
     xlabel!(p,L"$t$ (5min)")

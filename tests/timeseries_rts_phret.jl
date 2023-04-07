@@ -4,97 +4,9 @@
 
 include("../src/PowerPhaseRetrieval.jl")
 include("../src/vis/realtime.jl")
+include("../src/io/pm_timeseries.jl")
 import .PowerPhaseRetrieval as PPR
 using PowerModels,LinearAlgebra,Plots
-using DataFrames,CSV
-using Distributions,Random
-
-"""
-Generate a vector of time series load datas for the network.
-"""
-function generate_updates(net::Dict,mw_data::DataFrame,mvar_data::DataFrame)
-    m_samples,n_buses = size(mw_data)
-    baseMVA = net["baseMVA"]
-    @assert n_buses == length(net["bus"])
-    @assert haskey(net,"basic_network") #must be a basic network
-    # setup the load updates
-    load_updates = [] # list of network load updates
-    load_dict = net["load"] #current load dictionary
-    for t=1:m_samples #for every time series sample
-        load_dict_t = Dict{String,Any}()
-        for (load_id,load_entry) in load_dict
-            #bus_id = string(load_entry["load_bus"])
-            _,bus_id = load_entry["source_id"]
-            bus_id = string(bus_id)
-            pd_t, qd_t = mw_data[t,bus_id]/baseMVA, mvar_data[t,bus_id]/baseMVA
-            load_dict_t[load_id] = Dict("pd"=>pd_t,"qd"=>qd_t)
-        end
-        push!(load_updates,Dict("load"=>load_dict_t))
-    end
-    return load_updates
-end
-
-"""
-apply updates and solve power flows to generate voltage magnitudes, active powers, and reactive powers, and jacobian structs
-"""
-function generate_phase_retrieval_data(net::Dict,load_updates::Vector;sel_bus_types=[1])
-    @assert haskey(net,"basic_network") #must be a basic network
-    # select the bus indeces
-    sel_bus_idx = PPR.calc_bus_idx_of_type(net,sel_bus_types)
-    # setup the data containers
-    vms,vas,ps,qs,jacs = [],[],[],[],[]
-    for lu_t in load_updates
-
-        # update the network
-        update_data!(net,lu_t)
-        compute_ac_pf!(net)
-        
-        # calculate the data
-        vm_t = abs.(calc_basic_bus_voltage(net))[sel_bus_idx]
-        va_t = angle.(calc_basic_bus_voltage(net))[sel_bus_idx]
-        inj = calc_basic_bus_injection(net)[sel_bus_idx]
-        p_t,q_t = real.(inj),imag.(inj)
-        jac_t = PPR.calc_jacobian_matrix(net,sel_bus_types)
-
-        # append the data
-        push!(vms,vm_t)
-        push!(vas,va_t)
-        push!(ps,p_t)
-        push!(qs,q_t)
-        push!(jacs,jac_t)
-
-    end
-
-    return vms,vas,ps,qs,jacs
-end
-
-"""
-Generates the real time va data using the 5 minute data
-"""
-function generate_realtime_va_data(net::Dict,load_updates::Vector;sel_bus_types=[1])
-    @assert haskey(net,"basic_network") #must be a basic network
-    # select the bus indeces
-    sel_bus_idx = PPR.calc_bus_idx_of_type(net,sel_bus_types)
-    # setup the data containers
-    vas = []
-    for lu_t in load_updates
-        # update the network
-        update_data!(net,lu_t)
-        compute_ac_pf!(net)
-        va_t = angle.(calc_basic_bus_voltage(net))[sel_bus_idx]
-        push!(vas,va_t)
-    end
-    return vas
-end
-
-"""
-Generates random delays for real-time data
-"""
-function generate_delays()
-
-
-end
-
 
 """
 Given vectors of voltage magnitudes, active powers, reactive powers, and jacobian models
