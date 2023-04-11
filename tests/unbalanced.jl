@@ -1,5 +1,5 @@
+using Plots,LaTeXStrings
 using PowerModelsDistribution
-using JuMP,Ipopt
 using LinearAlgebra
 using ForwardDiff
 
@@ -11,11 +11,15 @@ math = transform_data_model(eng)
 pflow_model = instantiate_mc_model(eng, ACPUPowerModel,build_mc_pf)
 result = solve_mc_pf(math,ACPUPowerModel,Ipopt.Optimizer)
 
-# build the compound admittance matrix for the network
-K = 3 # number of buses
-Yabc = zeros(ComplexF64,3*K,3*K)
-for (i,branch) in enumerate(math["branch"])
+# build the compound block-admittance matrix for the unbalanced network
+K = length(math["bus"]) # number of buses
+Y = zeros(ComplexF64,3*K,3*K)
+
+for (branch_idx,branch) in math["branch"]
+
+    fr_bus, to_bus = branch["f_bus"], branch["t_bus"]    
+    fr_idx, to_idx = math["bus"][string(fr_bus)]["index"], math["bus"][string(to_bus)]["index"]
+    print(fr_idx,to_idx)
     G,B = calc_branch_y(branch)
-    Yabc[3*(branch["f_bus"]-1)+1:3*(branch["f_bus"]),3*(branch["t_bus"]-1)+1:3*(branch["t_bus"])] += branch["y_abc"]
-    Yabc[3*(branch["t_bus"]-1)+1:3*(branch["t_bus"]),3*(branch["f_bus"]-1)+1:3*(branch["f_bus"])] += branch["y_abc"]
+    Y[3*fr_idx-2:3*fr_idx,3*fr_idx-2:3*fr_idx] -= G + im.*B
 end
