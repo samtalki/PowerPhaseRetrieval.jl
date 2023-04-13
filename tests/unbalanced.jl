@@ -121,3 +121,5 @@ dqξ_0 = dqξ(vm0,va0,p0)
 #----- errors of the symmetry hypothesis of the Jacobian matrices
 err_dpθ = norm(dpθ(vm0,va0) - dpξ(vm0,va0,q0))/norm(dpθ(vm0,va0))
 err_dqθ = norm(dqθ(vm0,va0) - dqξ(vm0,va0,p0))/norm(dqθ(vm0,va0))
+
+norms = [norm(m) for m in [dpθ_0,dqθ_0,dpvm_0,dqvm_0,dpξ_0,dqξ_0]]
