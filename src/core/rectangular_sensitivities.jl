@@ -1,5 +1,5 @@
 function calc_rectangular_jacobian_sensitivities(G,B,v)
-    _,n = size(Y)
+    _,n = size(G)
     ∂pe = zeros(ComplexF64,n,n)
     ∂qe = zeros(ComplexF64,n,n)
     ∂pf = zeros(ComplexF64,n,n)
@@ -17,26 +17,26 @@ function calc_rectangular_jacobian_sensitivities(G,B,v)
                 ∂v²f[i,k] = 0
 
             else # diagonal elements
-
+                eᵢ,fᵢ = real(v[i]),imag(v[i])
                 #--- active power to  complex voltage
                 ∂pe[i,i] = sum(
                     [G[i,k]*real(v[k])-B[i,k]*imag(v[k]) for k=1:n]
-                ) + G[i,i]*real(v[i]) + B[i,i]*imag(v[i])
+                ) + G[i,i]*eᵢ + B[i,i]*fᵢ
                 ∂pf[i,i] = sum(
                     [G[i,k]*imag(v[k])+B[i,k]*real(v[k]) for k=1:n]
-                ) + G[i,i]*imag(v[i]) - B[i,i]*real(v[i])
+                ) - B[i,i]*eᵢ + G[i,i]*fᵢ 
 
                 #--- reactive power to complex voltage
                 ∂qe[i,i] = sum(
                     [-G[i,k]*imag(v[k]) - B[i,k]*real(v[k]) for k=1:n]
-                ) - B[i,i]*real(v[i]) + G[i,i]*imag(v[i])
+                ) - B[i,i]*eᵢ + G[i,i]*fᵢ
                 ∂qf[i,i] = sum(
                     [G[i,k]*real(v[k]) - B[i,k]*imag(v[k]) for k=1:n]
-                ) - G[i,i]*real(v[i]) - B[i,i]*imag(v[i])
+                ) - G[i,i]*eᵢ - B[i,i]*fᵢ
 
                 #--- squared voltage to complex voltage
-                ∂v²e[i,i] = 2*real(v[i])
-                ∂v²f[i,i] = 2*imag(v[i])
+                ∂v²e[i,i] = 2*eᵢ
+                ∂v²f[i,i] = 2*fᵢ
             end
         end
     end 

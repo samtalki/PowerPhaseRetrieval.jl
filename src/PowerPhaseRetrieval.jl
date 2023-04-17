@@ -12,11 +12,16 @@ include("core/structs.jl")
 #--Phase retrieval models
 
 include("prob/ph_retrieve.jl")
-#--- nr pf phret
+#--- nr polar phret
 include("prob/sens_phret.jl")
 include("prob/nr_ph_retrieve.jl")
 include("prob/rand_nr_phret.jl")
 include("core/nr_phaseless.jl")
+
+#--- nr rectangular phret
+include("core/rectangular_sensitivities.jl")
+include("prob/nr_rectangular.jl")
+
 #--- ybus phret
 include("prob/ybus_phret.jl")
 include("prob/ybus_phmax.jl")
@@ -54,6 +59,9 @@ export solve_ybus_phasecut!
 #export solve_pq_ybus_phasecut
 #--- Newton-Raphson phase retrieval
 export calc_phaseless_nr_pf,calc_phaseless_nr_pf!
+
+#--- Rectangular phase retrieval
+export solve_rectangular_phret!
 
 #--- Jacobian-like matrix utilities
 #- Classical AC Power flow Jacobian utilities
