@@ -1,11 +1,11 @@
 function calc_rectangular_jacobian_sensitivities(G,B,v)
     _,n = size(G)
-    ∂pe = zeros(ComplexF64,n,n)
-    ∂qe = zeros(ComplexF64,n,n)
-    ∂pf = zeros(ComplexF64,n,n)
-    ∂qf = zeros(ComplexF64,n,n)
-    ∂v²e = zeros(ComplexF64,n,n)
-    ∂v²f = zeros(ComplexF64,n,n)
+    ∂pe = zeros(n,n)
+    ∂qe = zeros(n,n)
+    ∂pf = zeros(n,n)
+    ∂qf = zeros(n,n)
+    ∂v²e = zeros(n,n)
+    ∂v²f = zeros(n,n)
     for i = 1:n
         for k=1:n
             if k != i # off-diagonal elements
