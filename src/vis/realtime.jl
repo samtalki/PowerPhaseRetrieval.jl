@@ -11,7 +11,7 @@ function plot_avg_vs_inst_tseries(est_averaged_data::Vector,act_average_data::Ve
         1:T,
         est_averaged_data,
         legend=true,
-        label=L"$\hat{\theta}$ (15m)",
+        label=L"$\hat{\theta}$ (15 min)",
         lw=2,
         la=0.5
     )
@@ -32,7 +32,7 @@ function plot_avg_vs_inst_tseries(est_averaged_data::Vector,act_average_data::Ve
         ms=2,
         ma=0.5,
     )
-    xlabel!(p,L"$t$ (5min)")
+    xlabel!(p,L"$t$ (5 min)")
     ylabel!(p,L"$\theta$ (rad)")
     return p
 end
