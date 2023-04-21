@@ -339,23 +339,3 @@ function jacobian_ineq_2(net::Dict,sel_bus_types=[1])
     return observable
 end
 
-"""
-Given a matrix A, compute the Bendixson's lower bound on the imaginary part of the eigenvalues of A.
-https://en.wikipedia.org/wiki/Bendixson%27s_inequality
-
-α = max_{i=1,...,n} (1/2)*|a_{ij} - a_{ji}|
-
-|Im(λ)| ≤ α √((n*(n-1))/2)
-"""
-function bendixsons_lower_bound(A::AbstractMatrix)
-    α = 0
-    n = size(A)[1]
-    for i=1:n
-        for j=1:n
-            if i != j
-                α = max(α,abs(A[i,j]-A[j,i])/2)
-            end
-        end
-    end
-    return α*sqrt((n*(n-1))/2)
-end

@@ -1,6 +1,7 @@
 include("../src/PowerPhaseRetrieval.jl")
 include("../src/core/gershdisc_blocks.jl")
 include("../src/core/gershdisc.jl")
+include("../src/core/phase_obs.jl")
 import .PowerPhaseRetrieval as PPR
 import PowerModels as PM
 using PowerModels
@@ -18,7 +19,9 @@ pct_phase_recoverable = Dict()
 pct_strong_phase_recoverable = Dict()
 jac_recoverable = Dict()
 pct_jac_recoverable = Dict()
+worst_lhs_radii = Dict()
 n_pq_bus = Dict()
+
 
 for case in cases
     # load case and run power flow
@@ -44,7 +47,9 @@ for case in cases
 
     #--- observability ---#
     n_pq_bus[case] = size(dpξ)[1]
-    case_results[case]["phase_recoverable"] = dpdth_observability(net)
+    worst_radius,ph_rec = dpdth_dqdth_observability(net)
+    worst_lhs_radii[case] = worst_radius
+    case_results[case]["phase_recoverable"] = ph_rec
     case_results[case]["jac_recoverable"] = is_jacobian_block_invertible(net)
 
 
