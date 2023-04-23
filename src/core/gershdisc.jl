@@ -9,6 +9,24 @@ struct PhaseObservability
     strong_observable::Vector{Bool}
 end
 
+
+function calc_gershgorin_discs(A::AbstractMatrix)
+    @assert size(A)[1] == size(A)[2]
+    _,n = size(A)
+    centers = zeros(n) # (center,radius)
+    radii = zeros(n,2) # (row_radii,col_radii)
+    for i = 1:n # for each diagonal entry
+        centers[i] = abs(A[i,i]) # center of the disc
+        for k=1:n # for each row/column
+            if k != i
+                radii[i,1] += abs(A[k,i]) # row radius
+                radii[i,2] += abs(A[i,k]) # column radius
+            end
+        end
+    end
+    return centers,radii
+end
+
 """
 Given a matrix, returns 2 vectors of booleans for each of row/column gershgorin discs that indicates if they do not contain the origin.
 """
