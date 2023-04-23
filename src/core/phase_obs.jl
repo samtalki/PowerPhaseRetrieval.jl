@@ -10,6 +10,45 @@ struct PhaseObservability
 end
 
 
+function dqdth_observability(net::Dict;sel_bus_types=[1])
+    sel_bus_idx = PPR.calc_bus_idx_of_type(net,sel_bus_types)
+    n_bus = length(sel_bus_idx)
+    J = PPR.calc_jacobian_matrix(net)
+    v = abs.(PM.calc_basic_bus_voltage(net))[sel_bus_idx]
+    p = real.(PM.calc_basic_bus_injection(net))[sel_bus_idx]
+    q = imag.(PM.calc_basic_bus_injection(net))[sel_bus_idx]
+    Sqv = J.qv[sel_bus_idx,sel_bus_idx]
+    Spv = J.pv[sel_bus_idx,sel_bus_idx]
+    @assert length(v) == length(q) == size(Sqv)[1] == size(Sqv)[2] == size(Spv)[1] == size(Spv)[2]
+    
+    # --- check observability of Δθ using ∂q∂θ condition ---#
+    dqth_rhs_col,dqth_rhs_row = [],[]
+    dqth_lhs = []
+    dqth_observable,dqth_strong_observable = [],[]
+    for i=1:n_bus
+        push!(dqth_lhs,
+            abs(2*p[i] - v[i]*Spv[i,i])
+        )
+        push!(dqth_rhs_row,
+            sum([v[i]*abs(Spv[k,i]) for k =1:n_bus if k!= i])  
+        )
+        push!(dqth_rhs_col,
+            sum([abs(Spv[i,k]*v[k]) for k=1:n_bus if k!=i])
+        )
+        push!(dqth_observable,
+            (dqth_lhs[i] >= dqth_rhs_row[i]) || (dqth_lhs[i] >= dqth_rhs_col[i])
+        )
+        push!(dqth_strong_observable,
+            2*abs(p[i]) + v[i]*abs(Spv[i,i]) >= sum([v[i]*abs(Spv[k,i]) for k=1:n_bus if k!= i])
+            || 
+            2*abs(p[i]) +  v[i]*abs(Spv[i,i]) >= sum([v[k]*abs(Spv[i,k]) for k=1:n_bus if k!= i])
+        )
+    end
+    
+    return PhaseObservability(
+        dqth_lhs,dqth_rhs_row,dqth_rhs_col,dqth_observable,dqth_strong_observable
+    )   
+end
 function dpdth_dqdth_observability(net::Dict;sel_bus_types =[1])
     sel_bus_idx = PPR.calc_bus_idx_of_type(net,sel_bus_types)
     n_bus = length(sel_bus_idx)
@@ -79,7 +118,7 @@ function dpdth_dqdth_observability(net::Dict;sel_bus_types =[1])
     #---- worst radii of the observability condition relative to the left hand side of the complex plane ---#
     worst_radii = []
     for i=1:n_bus
-        if !(observable[i]) #---- if not observable, how close did we get to the boundary? ---#
+        if !(dqth_strong_observable[i] && dpth_strong_observable[i]) #---- if not observable, how close did we get to the boundary? ---#
             if !(dpth_observable[i]) && !(dqth_observable[i])
                 push!(worst_radii,
                     min(dpth_rhs_row[i] - dpth_lhs[i],dpth_rhs_col[i] - dpth_lhs[i],dqth_rhs_row[i] - dqth_lhs[i],dqth_rhs_col[i] - dqth_lhs[i])
