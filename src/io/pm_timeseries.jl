@@ -87,7 +87,7 @@ subsample_data(data::DataFrame,sub_sample_rate::Int=3,start_idx=1) = data[start_
 given high-res data, generate subsampled data with optional noise and random delays
 """
 function generate_subsampled_data(data::DataFrame,
-    dist_noise::Distribution=Normal(0,0.01),
+    dist_noise::Distribution=Normal(0,0.1),
     prob_delay::Float64=0.1; # probability of a delay occuring at any arbitrary node
     sub_sample_rate::Int=3,
     start_idx=1
@@ -119,7 +119,7 @@ given multiple high-res datasets, generate subsampled data with optional noise a
 NOTE: uses the SAME DELAYS for all datasets
 """
 function generate_subsampled_data(data::AbstractArray{DataFrame},
-    dist_noise::Distribution=Normal(0,0.01),
+    dist_noise::Distribution=Normal(0,0.1),
     prob_delay::Float64=0.1; # probability of a delay occuring at any arbitrary node
     sub_sample_rate::Int=3,
     start_idx=1
