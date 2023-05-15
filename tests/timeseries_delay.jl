@@ -126,6 +126,6 @@ for bus_idx in 1:length(pq_buses)
     #---- plot with relative real time error
     rel_err_5m = round(norm(θ_15min_est - θ_5min_gtruth)/norm(θ_5min_gtruth)*100,digits=3)
     p = plot_avg_vs_inst_tseries(θ_15min_est,θ_15min_gtruth,θ_5min_gtruth)
-    title!(p,"Bus $(bus_idx), " * L"$p=0.1$, $\sigma_{\mathrm{mes}} = 0.1$, " * "5->15 min rel. err. $(rel_err_5m) %")
+    title!(p,"Bus $(bus_idx), " * L"$p=0.1$, $\sigma_{\mathrm{meas}} = 0.1$, " * "5->15 min rel. err. $(rel_err_5m) %")
     savefig(p,"figures/sampling-rate-and-noise-p0.1-sigma0.1/avg_vs_inst_$(bus_idx).pdf")
 end
