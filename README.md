@@ -12,7 +12,7 @@ This package is under development.
 Install Julia. Clone this repo by running
 
 ``
-git clone https://github.dev/samtalki/PowerPhaseRetrieval.jl.git
+git clone https://github.com/samtalki/PowerPhaseRetrieval.jl.git
 ``
 
 Navigate to PowerPhaseRetrieval.jl, run
