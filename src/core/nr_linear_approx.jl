@@ -16,13 +16,8 @@ end
 Calculates a basic linear approximation of the mismatches at the current grid state.
 """
 function calc_basic_linear_approx(net::Dict{String,Any})
-    J = calc_jacobian_matrix(net)
-
+    return nothing
 end
-
-
-
-
 
 """
 Given complex voltage and powers, and an admittance matrix Y, calculate the power flow mismatch.
